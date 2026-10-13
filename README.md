@@ -1,60 +1,71 @@
-<div align="center">
-
-# 🏃‍♂️ FitBuddy (핏버디)
-> **게이미피케이션 기반 단기 몰입형 헬스케어 & 웰니스 관리 플랫폼**
-
-<p align="center">
-  <img src="https://img.shields.io/badge/JavaScript-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black">
-  <img src="https://img.shields.io/badge/HTML5_Canvas-E34F26?style=for-the-badge&logo=html5&logoColor=white">
-  <img src="https://img.shields.io/badge/Node.js-339933?style=for-the-badge&logo=nodedotjs&logoColor=white">
-  <img src="https://img.shields.io/badge/MySQL-4479A1?style=for-the-badge&logo=mysql&logoColor=white">
-</p>
-
-</div>
+# 🏋️‍♂️ FitBuddy (핏버디)
+> **게이미피케이션 기반 단기 몰입형 헬스케어 및 웰니스 관리 플랫폼**  
+> 부담 없는 초간단 온보딩과 2D Canvas 캐릭터 육성/커스터마이징을 통해 운동 지속성을 극대화하는 맞춤형 헬스케어 서비스
 
 ---
 
-## 📌 프로젝트 개요 (Overview)
-
-**FitBuddy**는 기존 헬스 어플의 높은 초기 진입 장벽과 중도 이탈률 문제를 해결하기 위해 기획된 서비스입니다. 
-초간단 온보딩과 2D 캐릭터 육성 요소(Canvas 레이어링)를 결합하여 사용자가 즐겁게 건강 관리 습관을 형성하고 지속할 수 있도록 돕습니다.
-
-* **초기 이탈률 방지**: 가입 직후 초기 이탈률(D+1 Churn Rate) 30% 이하 목표
-* **잔존율 극대화**: 가입 후 30일 차 잔존율(D+30 Retention Rate) 25% 이상 유지
-
----
-
-## ✨ 핵심 기능 (Key Features)
-
-| 기능 | 설명 |
-| :--- | :--- |
-| **⚡ 초간단 온보딩** | 최소 정보 입력만으로 즉시 대시보드 진입 및 맞춤 운동 미션 추천 |
-| **🎯 맞춤형 미션 추천** | 사용자 활동 데이터를 분석한 **Rule-based 엔진** 기반 개인화 운동 제안 |
-| **💎 FitPoint 시스템** | 운동 미션 완료 시 통합 포인트 적립 (구독 유저 1.5x~2.0x 부스트) |
-| **🧸 2D 캐릭터 커스텀** | HTML5 Canvas 기반 파츠 레이어링 및 레벨업 커스터마이징 상점 |
-| **🔥 Streak & 이탈 방지** | 연속 운동 달성 기록 관리 및 Streak 보존/복구 쿠폰 로직 적용 |
+## 📌 목차
+1. [프로젝트 개요](#1-프로젝트-개요)
+2. [팀원 및 역할](#2-팀원-및-역할)
+3. [주요 타깃 & 페르소나](#3-주요-타깃--페르소나)
+4. [핵심 기능 (MVP)](#4-핵심-기능-mvp)
+5. [시스템 아키텍처](#5-시스템-아키텍처)
+6. [기술 스택 & 기술적 의사결정](#6-기술-스택--기술적-의사결정)
+7. [데이터베이스 설계 (ERD)](#7-데이터베이스-설계-erd)
+8. [API 명세서](#8-api-명세서)
+9. [핵심 비즈니스 로직 & 흐름도](#9-핵심-비즈니스-로직--흐름도)
+10. [비기능 요구사항 & 동시성/정합성 제어](#10-비기능-요구사항--동시성정합성-제어)
+11. [보안 요구사항](#11-보안-요구사항)
+12. [핵심 지표 & DoD (Definition of Done)](#12-핵심-지표--dod-definition-of-done)
 
 ---
 
-## 👥 팀원 및 역할 (Team & R&R)
+## 1. 프로젝트 개요
 
-| PM / Frontend | Backend Lead | Frontend Lead | BE Logic & API |
-| :---: | :---: | :---: | :---: |
-| <img src="https://github.com/github.png" width="80"> | <img src="https://github.com/github.png" width="80"> | <img src="https://github.com/github.png" width="80"> | <img src="https://github.com/github.png" width="80"> |
-| **주성진** | **정우진** | **차명실** | **박상욱** |
-| 문서 주도, UI 온보딩, 마이페이지, API 연동 | DB 스키마 설계, RESTful API, 추천 엔진 | 2D Canvas 캐릭터 커스텀, 상점 UI | FitPoint 트랜잭션, Streak 복구, 결제 API |
+기존 헬스케어 앱의 복잡한 초기 설정과 즉각적인 보상 부재로 인한 중도 이탈 문제를 해결하기 위해 기획된 **단기 몰입형 헬스케어 서비스**입니다.
+
+- **온보딩 간소화**: 초간단 운동 선호도 설문(3문항)으로 진입 장벽 최소화[cite: 1, 2]
+- **게이미피케이션**: 미션 수행을 통한 **FitPoint** 적립 및 2D Canvas 캐릭터 육성/파츠 장착[cite: 1, 2]
+- **Rule-based 미션 추천**: 사용자 운동 경험, 목표, 선호 시간대 분석 기반 개인화 루틴 배정 (매일 KST 00:00)[cite: 1, 2]
+- **Streak & 복구**: 연속 운동 달성 기록 관리 및 월 제한 기반 Streak 보호/복구 로직[cite: 1, 2]
+- **정합성 & 동시성**: 트랜잭션 원장 관리, 조건부 UPDATE 및 유저 행 잠금(`FOR UPDATE`)을 통한 포인트/재고 중복 차감 방지[cite: 1]
 
 ---
 
-## 📁 주요 문서 및 산출물 (Documents)
+## 2. 팀원 및 역할
 
-<details>
-<summary><b>📄 프로젝트 차터 (Project Charter) 및 산출물 보기 (클릭)</b></summary>
+| 이름 | 역할 | 담당 업무[cite: 1, 2] |
+| :--- | :--- | :--- |
+| **주성진** | **PM / QA / UI Front** | 프로젝트 총괄(PM), 통합 QA 검증, 프론트엔드 UI/UX 개발[cite: 2] |
+| **차명실** | **Front Lead** | 프론트엔드 개발 리드, 2D Canvas 캐릭터 레이어링 및 메인 대시보드 구현[cite: 1, 2] |
+| **정우진** | **Back Lead** | 백엔드 개발 리드, TRD 작성, DB 스키마 설계 및 트랜잭션/배치 로직 구현[cite: 1, 2] |
+| **박상욱** | **BE Logic / API** | 백엔드 비즈니스 로직 구현, RESTful API 연동 및 결제/구독 모듈 개발[cite: 2] |
 
-<br>
+---
 
-* 📄 **[Project Charter (PDF)]([./docs/FitBuddy_Project_Charter.pdf](https://docs.google.com/document/d/1lFsGDddVSWx6BWAw9CkEHPG0iZNFiHhfLK--wjRvEBs/edit?tab=t.0#heading=h.88y8l85d6a69))** - 프로젝트 목적, 범위, 성공지표 정의
-* 📄 **[PRD (Product Requirements Document)](./docs/FitBuddy_PRD.pdf)** - 요구사항 정의서
-* 📄 **[TRD (Technical Requirements Document)](./docs/FitBuddy_TRD.pdf)** - 시스템 및 DB 스키마 설계서
+## 3. 주요 타깃 & 페르소나
 
-</details>
+* **Primary User**: 운동 초심자 및 실패 경험자[cite: 2]
+* **Secondary User**: 바쁜 일상 속에서 습관 형성을 원하는 2030 세대[cite: 2]
+* **대표 페르소나**:
+  * **특성**: 캐릭터 육성 및 수집 등 게이미피케이션에 친숙하며, 즉각적인 시각적 보상을 선호함[cite: 2]
+  * **Pain Point**: 기존 헬스 앱의 초기 설정이 너무 복잡하고 단조로운 데이터 위주라 지속적인 동기부여가 안 됨[cite: 2]
+  * **Needs**: 진입 장벽이 낮고, 운동 완료 시 캐릭터 성장과 포인트 보상이 주어지는 직관적이고 재미있는 서비스[cite: 2]
+
+---
+
+## 4. 핵심 기능 (MVP)
+
+| 기능 ID | 핵심 기능 | 상세 설명[cite: 1, 2] | 우선순위[cite: 1, 2] |
+| :--- | :--- | :--- | :---: |
+| **F-01 / FR-01** | **간단 온보딩** | 운동 경험, 목표, 선호 시간대 등 최소 문항 설문 작성 후 즉시 진입[cite: 1, 2] | **상**[cite: 1, 2] |
+| **F-02 / FR-02** | **맞춤형 미션 추천** | Rule-based 엔진 기반으로 KST 00:00마다 일일 2~3개 맞춤 미션 자동 배정[cite: 1, 2] | **상**[cite: 1, 2] |
+| **F-03 / FR-03** | **FitPoint 시스템** | 미션 완수 시 포인트 지급 (Basic 1.0x~1.2x / Premium 1.5x~2.0x 부스트)[cite: 1, 2] | **상**[cite: 1, 2] |
+| **F-04 / FR-04** | **캐릭터 커스텀** | 2D Canvas 파츠 레이어링 상점, 포인트 소모를 통한 아이템 구매/장착 및 레벨업[cite: 1, 2] | **상**[cite: 1, 2] |
+| **F-05 / FR-05** | **Streak & 이탈 방지** | 연속 운동 달성 기록 관리 및 놓친 어제 기록에 대한 월 제한 복구 기능[cite: 1, 2] | **중**[cite: 1, 2] |
+| **F-06 / FR-06** | **구독 & 결제 API** | Freemium 모델 연동, Premium 구독 상태 관리 및 결제 실패 처리[cite: 1, 2] | **상 / 중**[cite: 1, 2] |
+| **F-07 / FR-07** | **리워드 교환** | 적립 포인트를 이용한 리워드 응모 및 기프티콘 교환[cite: 1] | **중**[cite: 1] |
+
+---
+
+## 5. 시스템 아키텍처
