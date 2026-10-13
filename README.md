@@ -53,7 +53,7 @@
 
 <br>
 
-* 📄 **[Project Charter (PDF)](./docs/FitBuddy_Project_Charter.pdf)** - 프로젝트 목적, 범위, 성공지표 정의
+* 📄 **[Project Charter (PDF)]([./docs/FitBuddy_Project_Charter.pdf](https://docs.google.com/document/d/1lFsGDddVSWx6BWAw9CkEHPG0iZNFiHhfLK--wjRvEBs/edit?tab=t.0#heading=h.88y8l85d6a69))** - 프로젝트 목적, 범위, 성공지표 정의
 * 📄 **[PRD (Product Requirements Document)](./docs/FitBuddy_PRD.pdf)** - 요구사항 정의서
 * 📄 **[TRD (Technical Requirements Document)](./docs/FitBuddy_TRD.pdf)** - 시스템 및 DB 스키마 설계서
 
