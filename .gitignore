@@ -1,0 +1,12 @@
+# Node / JavaScript
+node_modules/
+npm-debug.log*
+
+# Environment Variables (보안 키, DB 정보 제외)
+.env
+.env.local
+
+# IDE & OS
+.DS_Store
+.vscode/*
+!.vscode/settings.json
