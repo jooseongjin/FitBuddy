@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Gem, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Gem } from 'lucide-react';
 
-export const MissionDetail: React.FC = () => {
+export const MissionDetail = () => {
   const navigate = useNavigate();
   const [isCompleted, setIsCompleted] = useState(false);
   const [showModal, setShowModal] = useState(false);
