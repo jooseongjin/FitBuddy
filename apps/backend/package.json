@@ -1,0 +1,20 @@
+{
+  "name": "fitbuddy-backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "migrate": "node scripts/migrate.js",
+    "migrate:reset": "node scripts/migrate.js --reset",
+    "start": "node src/server.js",
+    "test": "node --test \"test/*.test.js\""
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2",
+    "mysql2": "^3.11.0",
+    "zod": "^3.23.8"
+  }
+}
