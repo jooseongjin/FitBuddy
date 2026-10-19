@@ -21,6 +21,9 @@ npm test                    # 통합 테스트 (migrate:reset 후 실행)
 | POST | /onboarding | Bearer | 최초 저장 201 / 409 이미 있음 |
 | PUT | /onboarding | Bearer | 수정 200 / 404 |
 | GET | /onboarding | Bearer | 조회 |
+| GET | /missions/recommended | Bearer | 오늘의 미션(없으면 추천 프로시저로 배정). 온보딩 전이면 409 ONBOARDING_REQUIRED |
+| POST | /missions/:id/complete | Bearer | 미션 완료 + 포인트 적립 (:id = user_mission_id). 중복/없는 미션 409 |
+| GET | /points/balance | Bearer | 포인트 잔액 `{success, balance}` |
 
 ### signup 요청
 `{ "userId": "영문숫자_ 4~30", "password": "8자+영문+숫자", "email": "...", "nickname": "2~16자" }`
