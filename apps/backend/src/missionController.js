@@ -1,51 +1,32 @@
-// controllers/missionController.js
+const db = require('../db');
+
+// API-04: 오늘의 추천 미션 조회
 const getRecommendedMissions = async (req, res) => {
   try {
-    const userNumber = req.user.user_number; // 인증 미들웨어에서 추출한 유저 번호
-    
-    // KST 기준 오늘 날짜 (YYYY-MM-DD)
-    const todayKST = new Date(new Date().getTime() + (9 * 60 * 60 * 1000))
-                      .toISOString().split('T')[0];
+    const userId = req.user?.id || req.query.userId;
 
-    // 1. 오늘 날짜에 배정된 미션이 있는지 조회
-    let assignedMissions = await db.query(
-      `SELECT um.user_mission_id, m.Missions_id, m.title, m.description, m.difficulty, m.base_point, um.mission_status
-       FROM User_missions um
-       JOIN Missions m ON um.Missions_id = m.Missions_id
-       WHERE um.Users_user_number = ? AND um.assigned_date = ?`,
-      [userNumber, todayKST]
+    const [rows] = await db.query(
+      `SELECT m.mission_id, m.title, m.description, m.reward_points, m.reward_exp, um.status
+       FROM missions m
+       LEFT JOIN user_missions um ON m.mission_id = um.mission_id AND um.user_id = ?
+       WHERE um.status IS NULL OR um.status = 'assigned'
+       LIMIT 5`,
+      [userId]
     );
-
-    // 2. 배정된 미션이 없다면 신규 배정 (Rule-based 또는 활성화된 미션 중 추출)
-    if (assignedMissions.length === 0) {
-      const activeMissions = await db.query(
-        `SELECT Missions_id FROM Missions WHERE is_active = TRUE LIMIT 3`
-      );
-
-      for (const mission of activeMissions) {
-        await db.query(
-          `INSERT INTO User_missions (Users_user_number, Missions_id, mission_status, assigned_date, assigned_at)
-           VALUES (?, ?, 'assigned', ?, NOW())`,
-          [userNumber, mission.Missions_id, todayKST]
-        );
-      }
-
-      // 재조회
-      assignedMissions = await db.query(
-        `SELECT um.user_mission_id, m.Missions_id, m.title, m.description, m.difficulty, m.base_point, um.mission_status
-         FROM User_missions um
-         JOIN Missions m ON um.Missions_id = m.Missions_id
-         WHERE um.Users_user_number = ? AND um.assigned_date = ?`,
-        [userNumber, todayKST]
-      );
-    }
 
     return res.status(200).json({
       success: true,
-      data: assignedMissions
+      data: rows,
     });
   } catch (error) {
-    console.error('Recommended Missions Error:', error);
-    return res.status(500).json({ message: '추천 미션 조회 중 오류가 발생했습니다.' });
+    console.error('추천 미션 조회 오류:', error);
+    return res.status(500).json({
+      success: false,
+      message: '서버 오류가 발생했습니다.',
+    });
   }
+};
+
+module.exports = {
+  getRecommendedMissions,
 };
