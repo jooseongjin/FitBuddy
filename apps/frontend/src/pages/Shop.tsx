@@ -156,7 +156,7 @@ export const Shop: React.FC = () => {
   // 마이페이지와 공유하는 상태 (FitPoint, 보유 목록, 캐릭터, 착용, 배경)
   const {
     fitPoint,
-    setFitPoint,
+    spendFitPoint,
     ownedIds,
     setOwnedIds,
     currentCharacterId,
@@ -171,6 +171,8 @@ export const Shop: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ShopTab>('head');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
+  // 구매 완료 체크(pop)·부족 안내(shake) 효과를 같은 아이템에서도 다시 실행하기 위한 번호
+  const [effectSeq, setEffectSeq] = useState(0);
 
   const currentCharacter = findCharacter(currentCharacterId);
   const equippedIds = equippedByCharacter[currentCharacterId] ?? EMPTY_EQUIPPED;
@@ -230,13 +232,13 @@ export const Shop: React.FC = () => {
     // 준비 중이거나 이미 보유한 항목은 구매 불가 (중복 구매 방지)
     if (!entry.available || isOwned(entry)) return;
 
-    // 구매 전 클라이언트에서 잔액 선검증
-    if (fitPoint < entry.price) {
+    // 구매 전 클라이언트에서 잔액 선검증 (FP만 차감 — XP·레벨은 바뀌지 않음)
+    setEffectSeq((previous) => previous + 1);
+    if (!spendFitPoint(entry.price)) {
       setFeedback({ type: 'insufficient', entry, shortage: entry.price - fitPoint });
       return;
     }
 
-    setFitPoint((previous) => previous - entry.price);
     setOwnedIds((previous) => new Set(previous).add(entry.id));
     // 구매만 하고 장착은 별도 동작이므로 미리보기는 종료
     setPreview(null);
@@ -337,7 +339,11 @@ export const Shop: React.FC = () => {
   const renderMessage = () => {
     if (feedback?.type === 'insufficient') {
       return (
-        <div className="flex flex-col items-center gap-1.5 bg-rose-50 border border-rose-100 rounded-xl px-3 py-2">
+        // 부족 안내가 뜰 때 좌우로 살짝 흔들림 (fb-shake 300ms)
+        <div
+          key={effectSeq}
+          className="flex flex-col items-center gap-1.5 bg-rose-50 border border-rose-100 rounded-xl px-3 py-2 animate-fb-shake"
+        >
           <p className="flex items-center gap-1.5 text-rose-600 font-bold">
             <CircleAlert size={ICON_SIZE.inline} aria-hidden="true" />
             {feedback.entry.name} · {feedback.entry.price.toLocaleString()} FP · {feedback.shortage.toLocaleString()} FitPoint 부족
@@ -358,7 +364,15 @@ export const Shop: React.FC = () => {
     let icon = <Info size={ICON_SIZE.inline} className="shrink-0 text-gray-400" aria-hidden="true" />;
     let lines: string[];
     if (feedback?.type === 'purchased') {
-      icon = <CircleCheck size={ICON_SIZE.inline} className="shrink-0 text-[#2F8A5B]" aria-hidden="true" />;
+      // 구매 완료 체크가 통통 튐 (fb-pop 250ms)
+      icon = (
+        <CircleCheck
+          key={effectSeq}
+          size={ICON_SIZE.inline}
+          className="shrink-0 text-[#2F8A5B] animate-fb-pop"
+          aria-hidden="true"
+        />
+      );
       lines = [
         `${feedback.entry.name} 구매 완료 · -${feedback.entry.price.toLocaleString()} FP · ${ACTIVATE_LABEL[feedback.tab].replace('하기', '')} 가능`,
         '이미 보유한 항목은 다시 구매할 수 없어요.',
@@ -518,6 +532,7 @@ export const Shop: React.FC = () => {
           backgroundSrc={displayedBackground?.imageSrc ?? null}
           previewName={previewEntry?.name ?? null}
           reservePreviewSpace
+          motionKey={`${currentCharacterId}|${displayedIds.head}|${displayedIds.clothes}|${displayedIds.acc}`}
         />
 
         {/* 카테고리 탭 - 아이콘 + 텍스트 5칸 그리드 (좁은 화면에서도 잘리지 않도록) */}

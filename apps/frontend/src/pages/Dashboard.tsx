@@ -1,27 +1,48 @@
-import React from 'react';
-import { Flame, Gem, Footprints, Zap, Clock, Home, Target, ShoppingBag, User } from 'lucide-react';
+import React, { useCallback, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { ChevronRight, Footprints, Zap, Clock } from 'lucide-react';
+import { BottomNav } from '../components/BottomNav';
+import { HeaderStatus } from '../components/progress/HeaderStatus';
+import { LevelBanner } from '../components/progress/LevelBanner';
+import { StreakCard } from '../components/progress/StreakCard';
+import { StreakRepairSheet } from '../components/progress/StreakRepairSheet';
+import { Toast } from '../components/progress/Toast';
+import { useProgress } from '../context/progressStore';
+import { useCharacterStore } from '../context/characterStore';
+import { useCompletedMissions } from '../hooks/useCompletedMissions';
+import { TODAY_MISSIONS } from '../data/missions';
 
 export const Dashboard: React.FC = () => {
+  const navigate = useNavigate();
+  const { streak, isMock, repairStreak } = useProgress();
+  const { fitPoint } = useCharacterStore();
+  const completed = useCompletedMissions();
+  const [repairOpen, setRepairOpen] = useState(false);
+  const [toast, setToast] = useState<{ message: string; seq: number } | null>(null);
+
+  const goMissions = useCallback(() => navigate('/missions'), [navigate]);
+  const closeRepair = useCallback(() => setRepairOpen(false), []);
+  const closeToast = useCallback(() => setToast(null), []);
+  const handleRepaired = useCallback((keptDays: number) => {
+    setRepairOpen(false);
+    setToast((previous) => ({ message: `${keptDays}일 연속 기록을 지켰어요!`, seq: (previous?.seq ?? 0) + 1 }));
+  }, []);
+
+  const doneCount = TODAY_MISSIONS.filter((mission) => completed.includes(mission.id)).length;
+
   return (
     <div className="min-h-screen bg-gray-50 pb-20 max-w-md mx-auto shadow-md">
       {/* 상단 헤더 */}
-      <div className="bg-white p-4 sticky top-0 border-b flex justify-between items-center z-10">
+      <div className="bg-white p-4 sticky top-0 border-b border-gray-100 flex justify-between items-center z-10">
         <div>
           <h1 className="text-base font-bold text-gray-800">사용자님, 오늘도 가볍게!</h1>
-          <div className="flex items-center gap-3 text-xs mt-1">
-            <span className="text-orange-500 font-semibold flex items-center gap-1">
-              <Flame size={14} /> 7일 연속
-            </span>
-            <span className="text-cyan-600 font-semibold flex items-center gap-1">
-              <Gem size={14} /> 2,480 FitPoint
-            </span>
-          </div>
+          <HeaderStatus />
         </div>
       </div>
 
       <div className="p-4 space-y-4">
         {/* 오늘의 건강 대시보드 */}
-        <div className="bg-white p-5 rounded-2xl shadow-sm border space-y-3">
+        <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 space-y-3">
           <div className="flex justify-between items-center">
             <h2 className="text-sm font-bold text-gray-800">오늘의 건강 대시보드</h2>
             <span className="bg-emerald-100 text-emerald-700 text-xs font-bold px-2.5 py-1 rounded-full">
@@ -48,64 +69,75 @@ export const Dashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* 캐릭터 레벨 배너 */}
-        <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100 flex justify-between items-center">
-          <div>
-            <span className="bg-blue-200 text-blue-800 text-[10px] font-bold px-2 py-0.5 rounded-md">
-              LEVEL 08 · 두리
-            </span>
-            <h3 className="text-sm font-bold text-gray-800 mt-1">조금만 더 걸으면 새 배지를 받아요!</h3>
-            <p className="text-xs text-blue-600 mt-0.5">앞으로 3,158걸음 · +120 FP</p>
-          </div>
-          <div className="text-4xl">🦦</div>
-        </div>
+        {/* 캐릭터 레벨 배너 - 레벨·XP는 미션 완료로 쌓임 */}
+        <LevelBanner title="조금만 더 걸으면 새 배지를 받아요!" subtitle="앞으로 3,158걸음 · +120 FP" />
+
+        {/* 연속 기록 - 위험 배너·복구 안내 포함 (복구 팝업은 버튼으로만 열림) */}
+        {streak && (
+          <StreakCard streak={streak} isMock={isMock} onOpenRepair={() => setRepairOpen(true)} onGoMissions={goMissions} />
+        )}
 
         {/* 오늘의 맞춤 미션 */}
         <div className="space-y-2">
           <div className="flex justify-between items-center">
             <h2 className="text-sm font-bold text-gray-800">오늘의 맞춤 미션</h2>
-            <span className="text-xs text-gray-500">2/3 완료</span>
+            <button
+              type="button"
+              onClick={goMissions}
+              className="inline-flex items-center gap-0.5 text-xs text-gray-500 cursor-pointer hover:text-gray-700"
+            >
+              {doneCount}/{TODAY_MISSIONS.length} 완료
+              <ChevronRight size={14} aria-hidden="true" />
+            </button>
           </div>
 
           <div className="space-y-2">
-            <div className="bg-white p-4 rounded-xl border flex justify-between items-center">
-              <div>
-                <p className="text-xs font-bold text-gray-800">아침 스트레칭</p>
-                <p className="text-[11px] text-gray-400 mt-0.5">10/10분 완료</p>
-              </div>
-              <span className="bg-gray-100 text-gray-500 text-xs font-semibold px-3 py-1.5 rounded-lg">완료됨</span>
-            </div>
-
-            <div className="bg-white p-4 rounded-xl border-2 border-emerald-500 flex justify-between items-center">
-              <div>
-                <p className="text-xs font-bold text-gray-800">가볍게 8천 보</p>
-                <p className="text-[11px] text-emerald-600 font-semibold mt-0.5">6,842 / 8,000걸음</p>
-              </div>
-              <span className="bg-emerald-100 text-emerald-700 text-xs font-semibold px-3 py-1.5 rounded-lg">진행중</span>
-            </div>
+            {TODAY_MISSIONS.map((mission) => {
+              const done = completed.includes(mission.id);
+              return (
+                <button
+                  key={mission.id}
+                  type="button"
+                  onClick={() => navigate(`/missions/${mission.id}`)}
+                  className={`w-full text-left bg-white p-4 rounded-xl flex justify-between items-center cursor-pointer transition ${
+                    done ? 'border border-gray-200' : 'border-2 border-emerald-500'
+                  }`}
+                >
+                  <div>
+                    <p className="text-xs font-bold text-gray-800">{mission.title}</p>
+                    <p className={`text-[11px] mt-0.5 ${done ? 'text-gray-400' : 'text-emerald-600 font-semibold'}`}>
+                      {done ? `${mission.goal} 완료` : mission.progress}
+                    </p>
+                  </div>
+                  <span
+                    className={`text-xs font-semibold px-3 py-1.5 rounded-lg ${
+                      done ? 'bg-gray-100 text-gray-500' : 'bg-emerald-100 text-emerald-700'
+                    }`}
+                  >
+                    {done ? '완료됨' : '진행중'}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>
 
-      {/* 하단 고정 GNB */}
-      <div className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white border-t flex justify-around py-2.5 z-20">
-        <div className="flex flex-col items-center text-emerald-600 cursor-pointer">
-          <Home size={20} />
-          <span className="text-[10px] font-bold mt-0.5">홈</span>
-        </div>
-        <div className="flex flex-col items-center text-gray-400 cursor-pointer">
-          <Target size={20} />
-          <span className="text-[10px] mt-0.5">미션</span>
-        </div>
-        <div className="flex flex-col items-center text-gray-400 cursor-pointer">
-          <ShoppingBag size={20} />
-          <span className="text-[10px] mt-0.5">상점</span>
-        </div>
-        <div className="flex flex-col items-center text-gray-400 cursor-pointer">
-          <User size={20} />
-          <span className="text-[10px] mt-0.5">마이페이지</span>
-        </div>
-      </div>
+      {repairOpen && streak && (
+        <StreakRepairSheet
+          streak={streak}
+          balance={fitPoint}
+          isMock={isMock}
+          onClose={closeRepair}
+          onSubmit={repairStreak}
+          onSuccess={handleRepaired}
+          onGoMissions={goMissions}
+        />
+      )}
+      {toast && <Toast key={toast.seq} message={toast.message} onClose={closeToast} />}
+
+      {/* 하단 고정 GNB (상점·마이페이지와 같은 공용 메뉴) */}
+      <BottomNav active="home" />
     </div>
   );
 };
