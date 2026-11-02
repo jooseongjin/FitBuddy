@@ -16,7 +16,6 @@ import { addDays, kstDateKey, nextMonthFirst } from '../../domain/kst';
 import { recentDays } from '../../domain/streakRules';
 import { clearCelebratedLevel, readCelebratedLevel } from '../../lib/celebrationStorage';
 import { EMPTY_EQUIPPED, findCharacter, getEquippedParts } from '../../data/characterItems';
-import { CHARACTER_NICKNAME } from '../../config/progressConfig';
 import { CharacterStage } from '../../components/CharacterStage';
 import { FitPointChip } from '../../components/FitPointChip';
 import { LevelCard } from '../../components/progress/LevelCard';
@@ -472,7 +471,7 @@ export const DevUiPreview: React.FC = () => {
           from={celebration.from}
           to={celebration.to}
           equippedParts={parts}
-          characterName={CHARACTER_NICKNAME}
+          characterName={findCharacter(currentCharacterId).name}
           onClose={() => setCelebration(null)}
         />
       )}

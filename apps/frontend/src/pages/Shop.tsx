@@ -14,6 +14,8 @@ import {
   PART_ITEMS,
   findCharacter,
   getEquippedParts,
+  isPartAvailableFor,
+  type CharacterDef,
   type PartCategory,
 } from '../data/characterItems';
 import { useCharacterStore } from '../context/characterStore';
@@ -38,6 +40,8 @@ type ShopEntry = {
   bgColor: string;
   // 이미지 에셋이 없는 항목은 false → 잠금(준비 중) 카드로 표시
   available: boolean;
+  // 잠금 카드에 보여줄 안내 (예: 지금 캐릭터용 이미지가 아직 없음)
+  lockText?: string;
 };
 
 type Preview = { tab: PreviewTab; id: string };
@@ -81,7 +85,8 @@ const EMPTY_MESSAGE: Record<ShopTab, string> = {
 
 const isPreviewTab = (tab: ShopTab): tab is PreviewTab => tab !== 'character';
 
-const getEntries = (tab: ShopTab): ShopEntry[] => {
+// 파츠는 지금 캐릭터용 레이어가 있을 때만 선택 가능 (캐릭터마다 몸 모양이 달라 전용 이미지가 필요)
+const getEntries = (tab: ShopTab, character: Pick<CharacterDef, 'id' | 'name'>): ShopEntry[] => {
   if (tab === 'character') {
     return CHARACTERS.map((character) => ({
       id: character.id,
@@ -108,7 +113,8 @@ const getEntries = (tab: ShopTab): ShopEntry[] => {
     price: item.price,
     thumb: item.icon ? { kind: 'icon', icon: item.icon } : null,
     bgColor: item.bgColor,
-    available: true,
+    available: isPartAvailableFor(item, character.id),
+    lockText: `${character.name}용 준비 중`,
   }));
 };
 
@@ -189,16 +195,17 @@ export const Shop: React.FC = () => {
   const displayedBackgroundId = preview?.tab === 'bg' ? preview.id : backgroundId;
   const displayedBackground = BACKGROUND_ITEMS.find((item) => item.id === displayedBackgroundId) ?? null;
 
-  const entries = getEntries(activeTab);
+  const characterInfo = { id: currentCharacter.id, name: currentCharacter.name };
+  const entries = getEntries(activeTab, characterInfo);
   const selectedEntry = entries.find((entry) => entry.id === selectedId) ?? null;
   const activeTabInfo = TABS.find((tab) => tab.key === activeTab);
   const previewEntry = preview
-    ? getEntries(preview.tab).find((entry) => entry.id === preview.id) ?? null
+    ? getEntries(preview.tab, characterInfo).find((entry) => entry.id === preview.id) ?? null
     : null;
 
   const equippedParts = useMemo(
-    () => getEquippedParts(currentCharacter, displayedIds),
-    [currentCharacter, displayedIds],
+    () => getEquippedParts(findCharacter(currentCharacterId), displayedIds),
+    [currentCharacterId, displayedIds],
   );
 
   const isOwned = (entry: ShopEntry) => ownedIds.has(entry.id);
@@ -419,7 +426,7 @@ export const Shop: React.FC = () => {
       return (
         <span className={`${base} bg-gray-100 text-gray-500`}>
           <Lock size={ICON_SIZE.badge} aria-hidden="true" />
-          잠금 · 준비 중
+          {entry.lockText ?? '잠금 · 준비 중'}
         </span>
       );
     }
@@ -432,7 +439,12 @@ export const Shop: React.FC = () => {
       );
     }
     if (isOwned(entry)) {
-      return <span className={`${base} bg-[#DCEEFF] text-sky-800`}>보유 중</span>;
+      // 캐릭터는 구매 없이 기본 보유 → 바로 교체할 수 있다는 의미로 표시
+      return (
+        <span className={`${base} bg-[#DCEEFF] text-sky-800`}>
+          {activeTab === 'character' ? '교체 가능' : '보유 중'}
+        </span>
+      );
     }
     return (
       <span className={`${base} bg-[#FFE8A8] text-amber-900`}>
@@ -587,7 +599,7 @@ export const Shop: React.FC = () => {
               const selected = entry.id === selectedId;
               const previewing = isPreviewing(entry);
 
-              // 잠금 캐릭터: 가격/보유 표시 없이 잠금 상태만 표시
+              // 잠금 항목(이미지 없음, 또는 지금 캐릭터용 이미지 없음): 가격/보유 표시 없이 잠금 상태만 표시
               if (!entry.available) {
                 return (
                   <button
@@ -595,14 +607,27 @@ export const Shop: React.FC = () => {
                     key={entry.id}
                     disabled
                     aria-pressed={false}
-                    aria-label={`${entry.name}, 준비 중`}
+                    aria-label={`${entry.name}, ${entry.lockText ?? '준비 중'}`}
                     className="p-2 rounded-2xl text-left border border-dashed border-gray-300 bg-white/60 cursor-not-allowed"
                   >
-                    <div className="h-28 rounded-xl bg-gray-100 flex flex-col items-center justify-center gap-1.5">
-                      <span className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-gray-400">
-                        <Lock size={ICON_SIZE.tab} aria-hidden="true" />
-                      </span>
-                      <span className="text-[10px] font-semibold text-gray-400">이미지 준비 중</span>
+                    <div className="relative h-28 rounded-xl bg-gray-100 flex flex-col items-center justify-center gap-1.5 overflow-hidden">
+                      {entry.thumb ? (
+                        <>
+                          <div className="h-full w-full flex items-center justify-center opacity-35 grayscale">
+                            <Thumb thumb={entry.thumb} />
+                          </div>
+                          <span className="absolute w-9 h-9 rounded-full bg-white/90 flex items-center justify-center text-gray-400">
+                            <Lock size={ICON_SIZE.tab} aria-hidden="true" />
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-gray-400">
+                            <Lock size={ICON_SIZE.tab} aria-hidden="true" />
+                          </span>
+                          <span className="text-[10px] font-semibold text-gray-400">이미지 준비 중</span>
+                        </>
+                      )}
                     </div>
                     <div className="pt-2 px-0.5 space-y-1">
                       <p className="text-sm font-bold text-gray-400 truncate">{entry.name}</p>
