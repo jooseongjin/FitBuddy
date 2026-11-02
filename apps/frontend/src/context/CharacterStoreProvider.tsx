@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   CharacterStoreContext,
   INITIAL_CHARACTER_ID,
@@ -16,10 +16,21 @@ export const CharacterStoreProvider: React.FC<{ children: React.ReactNode }> = (
   const [equippedByCharacter, setEquippedByCharacter] = useState(INITIAL_EQUIPPED_BY_CHARACTER);
   const [backgroundId, setBackgroundId] = useState<string | null>(null);
 
+  // 서버 연동 후에는 응답의 잔액(balance)으로 setFitPoint 하고, 화면에서 직접 빼지 않는다 (설계서 4.1)
+  const spendFitPoint = useCallback(
+    (amount: number) => {
+      if (amount < 0 || fitPoint < amount) return false;
+      setFitPoint((previous) => previous - amount);
+      return true;
+    },
+    [fitPoint],
+  );
+
   const value = useMemo<CharacterStore>(
     () => ({
       fitPoint,
       setFitPoint,
+      spendFitPoint,
       ownedIds,
       setOwnedIds,
       currentCharacterId,
@@ -29,7 +40,7 @@ export const CharacterStoreProvider: React.FC<{ children: React.ReactNode }> = (
       backgroundId,
       setBackgroundId,
     }),
-    [fitPoint, ownedIds, currentCharacterId, equippedByCharacter, backgroundId],
+    [fitPoint, spendFitPoint, ownedIds, currentCharacterId, equippedByCharacter, backgroundId],
   );
 
   return <CharacterStoreContext.Provider value={value}>{children}</CharacterStoreContext.Provider>;

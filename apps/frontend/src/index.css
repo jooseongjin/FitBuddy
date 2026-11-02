@@ -1,1 +1,112 @@
 @import "tailwindcss";
+
+/*
+ * FitBuddy 상점·마이페이지 애니메이션 (설계서 9장)
+ * - 다른 화면의 클래스와 겹치지 않도록 모두 fb- 접두사 사용
+ * - transform / opacity만 움직여 레이아웃 재계산 없이 부드럽게 (NFR-01)
+ */
+@theme {
+  --animate-fb-breathe: fb-breathe 2.4s ease-in-out infinite;
+  --animate-fb-pop: fb-pop 250ms ease-out;
+  --animate-fb-fade-in: fb-fade-in 200ms ease-out both;
+  --animate-fb-sheet-up: fb-sheet-up 250ms ease-out both;
+  --animate-fb-scale-in: fb-scale-in 300ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  --animate-fb-sparkle: fb-sparkle 900ms ease-out both;
+  --animate-fb-flame: fb-flame 600ms ease-out;
+  --animate-fb-float-up: fb-float-up 800ms ease-out both;
+  --animate-fb-shake: fb-shake 300ms ease-in-out;
+  --animate-fb-toast: fb-toast 250ms ease-out both;
+  --animate-fb-delta: fb-delta 900ms ease-out both;
+  --animate-fb-spin: fb-spin 0.8s linear infinite;
+  --animate-fb-fill: fb-fill 600ms ease-out;
+}
+
+/* XP 진행 바: 화면에 들어올 때 0에서 현재 길이까지 차오름 (끝 값은 요소의 transform) */
+@keyframes fb-fill {
+  from { transform: scaleX(0); }
+}
+
+@keyframes fb-breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.02); }
+}
+
+@keyframes fb-pop {
+  0% { transform: scale(0.94); }
+  60% { transform: scale(1.04); }
+  100% { transform: scale(1); }
+}
+
+@keyframes fb-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fb-sheet-up {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fb-scale-in {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* 반짝이: 중심에서 --fb-dx, --fb-dy 방향으로 퍼지며 사라짐 */
+@keyframes fb-sparkle {
+  0% { opacity: 0; transform: translate(0, 0) scale(0.4); }
+  30% { opacity: 1; }
+  100% { opacity: 0; transform: translate(var(--fb-dx, 0), var(--fb-dy, 0)) scale(1); }
+}
+
+@keyframes fb-flame {
+  0% { transform: translateY(0) scale(1); }
+  40% { transform: translateY(-6px) scale(1.18); }
+  100% { transform: translateY(0) scale(1); }
+}
+
+@keyframes fb-float-up {
+  0% { opacity: 0; transform: translateY(8px); }
+  25% { opacity: 1; transform: translateY(0); }
+  75% { opacity: 1; transform: translateY(-8px); }
+  100% { opacity: 0; transform: translateY(-16px); }
+}
+
+@keyframes fb-shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-4px); }
+  40%, 80% { transform: translateX(4px); }
+}
+
+@keyframes fb-toast {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* FP 변화량 (-480 등): 칩 옆에서 살짝 떠오르며 사라짐 */
+@keyframes fb-delta {
+  0% { opacity: 0; transform: translateY(4px); }
+  20% { opacity: 1; transform: translateY(0); }
+  80% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-10px); }
+}
+
+@keyframes fb-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* XP 진행 바: 왼쪽 기준으로 차오름 (width 대신 transform 사용) */
+.fb-xp-fill {
+  transform-origin: left center;
+  transition: transform 600ms ease-out;
+}
+
+/* 기기 설정 '동작 줄이기': 움직임은 끄고 결과만 보여줌 */
+@media (prefers-reduced-motion: reduce) {
+  [class*='animate-fb-'] {
+    animation: none !important;
+  }
+  .fb-xp-fill {
+    transition: none;
+  }
+}

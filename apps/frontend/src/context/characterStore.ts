@@ -13,6 +13,8 @@ import {
 export type CharacterStore = {
   fitPoint: number;
   setFitPoint: Dispatch<SetStateAction<number>>;
+  /** FP 차감 공통 함수 (상점 구매 등). 잔액이 부족하면 false, 아무것도 바꾸지 않음. XP·레벨과는 무관 */
+  spendFitPoint: (amount: number) => boolean;
   ownedIds: Set<string>;
   setOwnedIds: Dispatch<SetStateAction<Set<string>>>;
   currentCharacterId: string;
