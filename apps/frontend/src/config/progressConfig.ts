@@ -4,5 +4,4 @@
 /** Streak 위험 배너를 띄우는 KST 시각 (20시 이후) */
 export const RISK_BANNER_HOUR = 20;
 
-/** 캐릭터 애칭. TODO: 사용자 프로필 API 연동 시 교체 (기존 마이페이지 mock 값) */
-export const CHARACTER_NICKNAME = '두리';
+// 캐릭터 이름(두리·나비·보리)은 data/characterItems.ts의 CHARACTERS에서 현재 캐릭터 기준으로 표시

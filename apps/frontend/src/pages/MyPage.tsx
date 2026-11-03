@@ -29,7 +29,6 @@ import {
 } from '../data/characterItems';
 import { useCharacterStore } from '../context/characterStore';
 import { useProgress } from '../context/progressStore';
-import { CHARACTER_NICKNAME } from '../config/progressConfig';
 import { LevelCard } from '../components/progress/LevelCard';
 import { StreakCard } from '../components/progress/StreakCard';
 import { StreakRepairSheet } from '../components/progress/StreakRepairSheet';
@@ -160,7 +159,7 @@ export const MyPage: React.FC = () => {
             <h2 className="text-base font-bold text-gray-800 truncate">{MOCK_PROFILE.nickname}</h2>
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="inline-flex items-center bg-[#DCEEFF] text-sky-800 text-[11px] font-bold px-2.5 py-1 rounded-full whitespace-nowrap">
-                Lv.{progress ? progress.level : '-'} · {CHARACTER_NICKNAME}
+                Lv.{progress ? progress.level : '-'} · {character.name}
               </span>
               {streak && (
                 <span
@@ -188,7 +187,7 @@ export const MyPage: React.FC = () => {
           <div className="flex justify-between items-center px-1">
             <h2 className="flex items-center gap-1.5 text-sm font-bold text-gray-800">
               <PawPrint size={ICON_SIZE.title} className="text-[#2F8A5B]" aria-hidden="true" />
-              내 캐릭터 · {CHARACTER_NICKNAME}
+              내 캐릭터 · {character.name}
             </h2>
             <button
               type="button"
@@ -202,7 +201,7 @@ export const MyPage: React.FC = () => {
           </div>
           <CharacterStage
             equippedParts={myPageEquippedParts}
-            label={`${CHARACTER_NICKNAME} 캐릭터`}
+            label={`${character.name} 캐릭터`}
             statusText={`${character.name} · ${background?.name ?? '기본 배경'}`}
             backgroundSrc={background?.imageSrc ?? null}
           />

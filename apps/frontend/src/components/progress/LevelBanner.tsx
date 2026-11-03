@@ -4,7 +4,6 @@ import { useProgress } from '../../context/progressStore';
 import { useCharacterStore } from '../../context/characterStore';
 import { EMPTY_EQUIPPED, findCharacter, getEquippedParts } from '../../data/characterItems';
 import { getXpProgress } from '../../domain/levelRules';
-import { CHARACTER_NICKNAME } from '../../config/progressConfig';
 import { CharacterCanvas } from '../CharacterCanvas';
 import { CharacterMotion } from './CharacterMotion';
 
@@ -32,7 +31,7 @@ export const LevelBanner: React.FC<LevelBannerProps> = ({ title, subtitle, class
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="bg-[#DCEEFF] text-sky-800 text-[10px] font-bold px-2 py-0.5 rounded-md whitespace-nowrap">
-            Lv.{progress?.level ?? '-'} · {CHARACTER_NICKNAME}
+            Lv.{progress?.level ?? '-'} · {character.name}
           </span>
           {progress && (
             <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-sky-700 whitespace-nowrap">
@@ -63,7 +62,7 @@ export const LevelBanner: React.FC<LevelBannerProps> = ({ title, subtitle, class
       </div>
       <div className="shrink-0 w-[84px]">
         <CharacterMotion>
-          <CharacterCanvas equippedParts={parts} size="shop" label={`${CHARACTER_NICKNAME} 캐릭터`} />
+          <CharacterCanvas equippedParts={parts} size="shop" label={`${character.name} 캐릭터`} />
         </CharacterMotion>
       </div>
     </div>
