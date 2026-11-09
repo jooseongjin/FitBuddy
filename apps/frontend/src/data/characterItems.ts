@@ -393,11 +393,12 @@ export const BACKGROUND_ITEMS: BackgroundItem[] = [
   { id: 'dog_bg_sunset', name: '노을 언덕', price: 450, owned: false, thumbSrc: '/dog_bg_sunset.png', imageSrc: '/dog_bg_sunset.png' },
 ];
 
-// 캐릭터별 초기 착용 상태 (설계서 시안: 그린 캡 + 등산 자켓 → 자켓 에셋이 없어 햇살 우비로 대체)
-// 나비·보리는 처음 교체했을 때 아무것도 착용하지 않은 기본 모습
+// 캐릭터별 초기 착용 상태
+// 시연 기본값: 두리로 시작하고, 기본 아이템(그린 캡·새싹 모자·햇살 우비)은 보유만 하고 장착하지 않은 상태
+// 나비·보리도 처음 교체했을 때 아무것도 착용하지 않은 기본 모습
 // TODO: 전역 상태/서버 연동 전까지 홈과 상점 모두 이 초기값에서 시작
 export const INITIAL_EQUIPPED: Record<string, EquippedIds> = {
-  [DEFAULT_CHARACTER_ID]: { head: 'hat_cap', clothes: 'dog_clothes_raincoat', acc: null },
+  [DEFAULT_CHARACTER_ID]: { head: null, clothes: null, acc: null },
 };
 export const EMPTY_EQUIPPED: EquippedIds = { head: null, clothes: null, acc: null };
 

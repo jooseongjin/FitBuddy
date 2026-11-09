@@ -6,17 +6,20 @@ import { HeaderStatus } from '../components/progress/HeaderStatus';
 import { LevelBanner } from '../components/progress/LevelBanner';
 import { StreakRiskBanner } from '../components/progress/StreakRiskBanner';
 import { useProgress } from '../context/progressStore';
-import { useCompletedMissions } from '../hooks/useCompletedMissions';
+import { useMissionStates } from '../hooks/useMissionStates';
 import { shouldShowRiskBanner } from '../domain/streakRules';
 import { RISK_BANNER_HOUR } from '../config/progressConfig';
-import { TODAY_MISSIONS } from '../data/missions';
+import { TODAY_MISSIONS, progressLabel } from '../data/missions';
+import { MISSION_BADGE } from '../components/missionBadge';
 
 export const Missions: React.FC = () => {
   const navigate = useNavigate();
   const { streak } = useProgress();
-  const completed = useCompletedMissions();
+  const states = useMissionStates();
 
-  const doneCount = TODAY_MISSIONS.filter((mission) => completed.includes(mission.id)).length;
+  const count = (status: string) => TODAY_MISSIONS.filter((mission) => states[mission.id].status === status).length;
+  const doneCount = count('done');
+  const readyCount = count('ready');
   const showRisk = streak !== null && shouldShowRiskBanner(streak, RISK_BANNER_HOUR);
 
   return (
@@ -41,7 +44,10 @@ export const Missions: React.FC = () => {
           <StreakRiskBanner
             days={streak.currentStreak}
             onGoMissions={() => {
-              const next = TODAY_MISSIONS.find((mission) => !completed.includes(mission.id));
+              // 보상 대기 미션이 있으면 먼저, 없으면 진행 중 미션
+              const next =
+                TODAY_MISSIONS.find((mission) => states[mission.id].status === 'ready') ??
+                TODAY_MISSIONS.find((mission) => states[mission.id].status !== 'done');
               if (next) navigate(`/missions/${next.id}`);
             }}
           />
@@ -52,38 +58,34 @@ export const Missions: React.FC = () => {
           <div className="flex justify-between items-center">
             <h2 className="text-sm font-bold text-gray-800">운동 미션</h2>
             <span className="text-xs text-gray-500">
-              진행중 {TODAY_MISSIONS.length - doneCount} · 완료 {doneCount}
+              진행중 {TODAY_MISSIONS.length - doneCount - readyCount} · 보상 대기 {readyCount} · 완료 {doneCount}
             </span>
           </div>
 
           {TODAY_MISSIONS.map((m) => {
-            const done = completed.includes(m.id);
+            const { status, current } = states[m.id];
+            const done = status === 'done';
+            const badge = MISSION_BADGE[status];
             return (
               <button
                 key={m.id}
                 type="button"
                 onClick={() => navigate(`/missions/${m.id}`)}
                 className={`w-full text-left bg-white p-4 rounded-xl border transition cursor-pointer flex justify-between items-center gap-2 ${
-                  done ? 'border-gray-200' : 'border-emerald-500 shadow-sm'
+                  done ? 'border-gray-200' : status === 'ready' ? 'border-amber-400 border-2 shadow-sm' : 'border-emerald-500 shadow-sm'
                 }`}
               >
                 <div className="space-y-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <h3 className="text-sm font-bold text-gray-800">{m.title}</h3>
-                    <span className="text-xs text-emerald-600 font-semibold">{done ? m.goal : m.progress}</span>
+                    <span className="text-xs text-emerald-600 font-semibold tabular-nums">{progressLabel(m, current)}</span>
                   </div>
                   <p className="text-xs text-gray-400">{m.desc}</p>
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0">
                   <span className="text-xs font-bold text-emerald-600">+{m.basePoint} FP</span>
-                  <span
-                    className={`text-xs px-2.5 py-1 rounded-lg font-semibold ${
-                      done ? 'bg-gray-100 text-gray-500' : 'bg-emerald-100 text-emerald-700'
-                    }`}
-                  >
-                    {done ? '완료됨' : '진행중'}
-                  </span>
+                  <span className={`text-xs px-2.5 py-1 rounded-lg font-semibold whitespace-nowrap ${badge.className}`}>{badge.label}</span>
                   <ChevronRight size={16} className="text-gray-400" />
                 </div>
               </button>

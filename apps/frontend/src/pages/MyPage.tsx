@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Bell,
   ChevronRight,
@@ -34,10 +34,19 @@ import { StreakCard } from '../components/progress/StreakCard';
 import { StreakRepairSheet } from '../components/progress/StreakRepairSheet';
 import { Toast } from '../components/progress/Toast';
 import { AnimatedNumber } from '../components/progress/AnimatedNumber';
+import { TIME_OPTIONS, displayName, goalTitle, readProfile } from '../lib/profileStorage';
+import {
+  REMINDER_TIMES,
+  readReminder,
+  reminderPermission,
+  requestReminderPermission,
+  showWorkoutNotification,
+  subscribeReminder,
+  writeReminder,
+} from '../lib/reminderSettings';
 
-// TODO: 사용자 정보 API 연동 전 mock 값
+// 닉네임·운동 목표는 프로필 수정 화면에서 저장한 값 (프로필 API 연동 전까지 브라우저 저장)
 // FitPoint는 상점과 공유하는 캐릭터 저장소에서, 레벨·XP·Streak은 progress 저장소에서 읽음
-const MOCK_PROFILE = { nickname: '사용자님' };
 
 const PART_LABEL: Record<PartCategory, string> = { head: '머리', clothes: '의상', acc: '액세서리' };
 const PART_ORDER: PartCategory[] = ['head', 'clothes', 'acc'];
@@ -65,8 +74,45 @@ export const MyPage: React.FC = () => {
     checkCelebrationOnEntry,
   } = useProgress();
 
+  const location = useLocation();
+  const [profile] = useState(readProfile);
+  const nickname = displayName(profile.nickname);
+  const minutesTitle = TIME_OPTIONS.find((option) => option.id === profile.minutes)?.title ?? '';
+
   const [repairOpen, setRepairOpen] = useState(false);
-  const [toast, setToast] = useState<{ message: string; seq: number } | null>(null);
+  // 프로필 저장 후 돌아오면 안내 토스트 (navigate state)
+  const [toast, setToast] = useState<{ message: string; seq: number } | null>(() => {
+    const message = (location.state as { toast?: string } | null)?.toast;
+    return message ? { message, seq: 1 } : null;
+  });
+  // 토스트를 한 번 보여준 뒤 뒤로 가기·새로고침에서 다시 뜨지 않도록 history state 비움
+  useEffect(() => {
+    if ((location.state as { toast?: string } | null)?.toast) navigate(location.pathname, { replace: true, state: null });
+  }, [location.pathname, location.state, navigate]);
+
+  // 운동 알림
+  const reminder = useSyncExternalStore(subscribeReminder, readReminder);
+  const [permission, setPermission] = useState(reminderPermission);
+  const [reminderNote, setReminderNote] = useState<string | null>(null);
+  const toggleReminder = async () => {
+    if (reminder.enabled) {
+      writeReminder({ ...reminder, enabled: false });
+      setReminderNote(null);
+      return;
+    }
+    const result = await requestReminderPermission();
+    setPermission(result);
+    if (result === 'granted') {
+      writeReminder({ ...reminder, enabled: true });
+      setReminderNote(`매일 ${reminder.time}에 알려드릴게요. 앱이 열려 있을 때 알림이 와요.`);
+    } else if (result === 'denied') {
+      setReminderNote('브라우저 알림이 차단돼 있어요. 주소창 왼쪽 사이트 설정에서 알림을 허용해 주세요.');
+    } else if (result === 'unsupported') {
+      setReminderNote('이 브라우저는 알림을 지원하지 않아요.');
+    } else {
+      setReminderNote('알림 권한을 허용해야 켤 수 있어요.');
+    }
+  };
 
   const character = findCharacter(currentCharacterId);
   const equippedIds = equippedByCharacter[currentCharacterId] ?? EMPTY_EQUIPPED;
@@ -156,7 +202,7 @@ export const MyPage: React.FC = () => {
             <PawPrint size={22} aria-hidden="true" />
           </span>
           <div className="min-w-0 flex-1 space-y-1.5">
-            <h2 className="text-base font-bold text-gray-800 truncate">{MOCK_PROFILE.nickname}</h2>
+            <h2 className="text-base font-bold text-gray-800 truncate">{nickname}</h2>
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="inline-flex items-center bg-[#DCEEFF] text-sky-800 text-[11px] font-bold px-2.5 py-1 rounded-full whitespace-nowrap">
                 Lv.{progress ? progress.level : '-'} · {character.name}
@@ -231,18 +277,30 @@ export const MyPage: React.FC = () => {
 
         {/* 4. 포인트(FP)와 경험치(XP) — 쓰는 값과 쌓이는 값을 색으로 구분 */}
         <section className="grid grid-cols-2 gap-3" aria-label="FitPoint와 경험치">
-          <div className="rounded-2xl bg-[#FFF6D9] border border-[#FFE8A8] px-3.5 py-3">
-            <p className="flex items-center gap-1.5 text-xs font-bold text-amber-800">
-              <span className="w-6 h-6 rounded-full bg-[#FFE8A8] flex items-center justify-center text-amber-700">
-                <Gem size={ICON_SIZE.inline} aria-hidden="true" />
+          {/* 잔액을 누르면 적립·사용 내역 (API-07) */}
+          <button
+            type="button"
+            onClick={() => navigate('/points')}
+            aria-label={`FitPoint ${fitPoint.toLocaleString()} FP, 적립·사용 내역 보기`}
+            className="text-left rounded-2xl bg-[#FFF6D9] border border-[#FFE8A8] px-3.5 py-3 cursor-pointer hover:brightness-[0.98]"
+          >
+            <p className="flex items-center justify-between gap-1 text-xs font-bold text-amber-800">
+              <span className="flex items-center gap-1.5">
+                <span className="w-6 h-6 rounded-full bg-[#FFE8A8] flex items-center justify-center text-amber-700">
+                  <Gem size={ICON_SIZE.inline} aria-hidden="true" />
+                </span>
+                FitPoint
               </span>
-              FitPoint
+              <span className="inline-flex items-center text-[10px] font-bold text-amber-700">
+                내역
+                <ChevronRight size={12} aria-hidden="true" />
+              </span>
             </p>
             <p className="mt-1.5 text-lg font-extrabold text-amber-900 leading-none">
               <AnimatedNumber value={fitPoint} /> <span className="text-xs font-bold">FP</span>
             </p>
             <p className="mt-1 text-[10px] text-amber-800/70">상점·기록 복구에 쓰는 포인트</p>
-          </div>
+          </button>
           <div className="rounded-2xl bg-[#EEF7FF] border border-[#DCEEFF] px-3.5 py-3">
             <p className="flex items-center gap-1.5 text-xs font-bold text-sky-800">
               <span className="w-6 h-6 rounded-full bg-[#DCEEFF] flex items-center justify-center text-sky-700">
@@ -301,48 +359,84 @@ export const MyPage: React.FC = () => {
           <h2 className="text-sm font-bold text-gray-800 px-1">설정</h2>
 
           <div className={`${CARD} p-4 flex justify-between items-center gap-3`}>
-            <div className="flex items-start gap-2.5">
+            {/* min-w-0 + flex-1: 긴 글은 말줄임 처리해 [수정] 버튼이 카드 밖으로 밀리지 않게 */}
+            <div className="flex items-start gap-2.5 min-w-0 flex-1">
               <span className="w-8 h-8 rounded-full bg-[#DCEEFF] text-sky-700 flex items-center justify-center shrink-0">
                 <UserPen size={ICON_SIZE.title} aria-hidden="true" />
               </span>
-              <div>
+              <div className="min-w-0">
                 <p className="text-sm font-bold text-gray-800">프로필</p>
-                <p className="text-xs text-gray-500 mt-0.5">이름과 기본 정보 관리</p>
+                <p className="text-xs text-gray-500 mt-0.5 truncate">
+                  {goalTitle(profile.goal)} · {minutesTitle}
+                </p>
               </div>
             </div>
-            {/* TODO: 정보 관리 화면(라우트)이 아직 없어 비활성 */}
             <button
               type="button"
-              disabled
-              title="정보 관리 화면 준비 중"
-              className="shrink-0 text-xs font-bold px-3.5 py-1.5 rounded-full bg-gray-100 text-gray-400 cursor-not-allowed"
+              onClick={() => navigate('/mypage/profile')}
+              className="shrink-0 text-xs font-bold px-3.5 py-1.5 rounded-full bg-[#DDF3E8] text-[#2F8A5B] cursor-pointer hover:brightness-95"
             >
-              수정 · 준비 중
+              수정
             </button>
           </div>
 
-          <div className={`${CARD} p-4 flex justify-between items-center gap-3`}>
-            <div className="flex items-start gap-2.5">
-              <span className="w-8 h-8 rounded-full bg-[#FFE8A8] text-amber-700 flex items-center justify-center shrink-0">
-                <Bell size={ICON_SIZE.title} aria-hidden="true" />
-              </span>
-              <div>
-                <p className="text-sm font-bold text-gray-800">운동 알림</p>
-                <p className="text-xs text-gray-500 mt-0.5">매일 운동할 시간을 알려드려요</p>
-                <p className="text-[11px] text-gray-400 mt-0.5">OS 푸시 알림 연동 준비 중</p>
+          <div className={`${CARD} p-4 space-y-3`}>
+            <div className="flex justify-between items-center gap-3">
+              <div className="flex items-start gap-2.5">
+                <span className="w-8 h-8 rounded-full bg-[#FFE8A8] text-amber-700 flex items-center justify-center shrink-0">
+                  <Bell size={ICON_SIZE.title} aria-hidden="true" />
+                </span>
+                <div>
+                  <p className="text-sm font-bold text-gray-800">운동 알림</p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {reminder.enabled ? `매일 ${reminder.time}에 알려드려요` : '매일 운동할 시간을 알려드려요'}
+                  </p>
+                </div>
               </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={reminder.enabled}
+                aria-label="운동 알림"
+                onClick={() => void toggleReminder()}
+                className={`shrink-0 relative w-12 h-7 rounded-full transition cursor-pointer ${reminder.enabled ? 'bg-[#59B985]' : 'bg-gray-200'}`}
+              >
+                <span
+                  className={`absolute top-1 w-5 h-5 rounded-full bg-white shadow-sm transition-all ${reminder.enabled ? 'left-6' : 'left-1'}`}
+                />
+              </button>
             </div>
-            {/* TODO: OS 푸시 설정 연동 전까지 토글 비활성 (실제 알림 설정이 바뀌는 것처럼 보이지 않도록) */}
-            <button
-              type="button"
-              role="switch"
-              aria-checked={false}
-              aria-label="운동 알림 (준비 중)"
-              disabled
-              className="shrink-0 relative w-12 h-7 rounded-full bg-gray-200 cursor-not-allowed"
-            >
-              <span className="absolute top-1 left-1 w-5 h-5 rounded-full bg-white shadow-sm" />
-            </button>
+            {reminder.enabled && (
+              <div className="flex items-center justify-between gap-2 pl-[42px]">
+                <label className="flex items-center gap-2 text-xs text-gray-600">
+                  알림 시각
+                  <select
+                    value={reminder.time}
+                    onChange={(event) => writeReminder({ ...reminder, time: event.target.value })}
+                    className="rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs font-bold text-gray-700"
+                  >
+                    {REMINDER_TIMES.map((time) => (
+                      <option key={time} value={time}>
+                        {time}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setReminderNote(showWorkoutNotification() ? '테스트 알림을 보냈어요.' : '알림을 보내지 못했어요. 브라우저 알림 권한을 확인해 주세요.')}
+                  className="text-[11px] font-bold text-[#2F8A5B] bg-[#DDF3E8] rounded-full px-2.5 py-1 cursor-pointer"
+                >
+                  테스트 알림
+                </button>
+              </div>
+            )}
+            {(reminderNote || permission === 'denied') && (
+              <p role="status" className="pl-[42px] text-[11px] text-gray-500">
+                {reminderNote ?? '브라우저 알림이 차단돼 있어요. 사이트 설정에서 알림을 허용해 주세요.'}
+              </p>
+            )}
+            <p className="pl-[42px] text-[10px] text-gray-400">앱을 닫아 두면 알림이 오지 않아요 (푸시 알림 서버 준비 중)</p>
           </div>
         </section>
       </div>

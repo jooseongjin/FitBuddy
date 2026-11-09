@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useMemo, useState } from 'react';
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, CircleAlert, Flame, Gem, LoaderCircle } from 'lucide-react';
 import { HeaderStatus } from '../components/progress/HeaderStatus';
@@ -9,10 +9,10 @@ import { CharacterCanvas } from '../components/CharacterCanvas';
 import { CharacterMotion } from '../components/progress/CharacterMotion';
 import { useProgress } from '../context/progressStore';
 import { useCharacterStore } from '../context/characterStore';
-import { useCompletedMissions } from '../hooks/useCompletedMissions';
+import { useMissionStates } from '../hooks/useMissionStates';
 import { completeMission } from '../api/missionRewardApi';
 import { ApiError, type MissionRewardResult } from '../api/progressTypes';
-import { findMission } from '../data/missions';
+import { findMission, progressLabel, progressPercent, remainingLabel } from '../data/missions';
 import { EMPTY_EQUIPPED, findCharacter, getEquippedParts } from '../data/characterItems';
 
 export const MissionDetail = () => {
@@ -21,8 +21,12 @@ export const MissionDetail = () => {
   const mission = findMission(id);
   const { applyMissionReward, releaseCelebration } = useProgress();
   const { currentCharacterId, equippedByCharacter } = useCharacterStore();
-  const completed = useCompletedMissions();
-  const isCompleted = mission !== null && completed.includes(mission.id);
+  const states = useMissionStates();
+  const state = mission ? states[mission.id] : null;
+  const isCompleted = state?.status === 'done';
+  // 목표 미달성(진행 중)이면 보상을 받을 수 없음
+  const isInProgress = state?.status === 'in_progress';
+  const current = state?.current ?? 0;
 
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -38,16 +42,21 @@ export const MissionDetail = () => {
   const release = useEffectEvent(() => releaseCelebration());
   useEffect(() => () => release(), []);
 
+  // 연타 방지: state는 다음 렌더 전까지 바뀌지 않아 빠른 두 번째 클릭을 막지 못하므로 ref로 즉시 잠금
+  const submittingRef = useRef(false);
+
   const handleComplete = async () => {
-    if (!mission || submitting) return;
+    if (!mission || submittingRef.current) return;
     if (isCompleted) {
       if (reward) setShowModal(true);
       return;
     }
+    if (isInProgress) return;
+    submittingRef.current = true;
     setSubmitting(true);
     setErrorMessage(null);
     try {
-      const result = await completeMission(mission.id, mission.basePoint);
+      const result = await completeMission(mission.id, mission.basePoint, mission.title);
       // FP·XP·레벨·Streak 갱신. 레벨업 축하는 보상 모달을 닫은 뒤에 띄움
       applyMissionReward(result, { deferCelebration: true });
       setReward(result);
@@ -55,6 +64,7 @@ export const MissionDetail = () => {
     } catch (error) {
       setErrorMessage(error instanceof ApiError ? error.message : '보상을 받지 못했어요. 다시 시도해 주세요.');
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   };
@@ -97,23 +107,37 @@ export const MissionDetail = () => {
         {/* 미션 타이틀 배너 */}
         <LevelBanner title={mission.title} subtitle={`목표 달성 보상 · +${mission.basePoint} FP · XP`} />
 
-        {/* 진행 상태 카드 */}
-        <div className="bg-white p-4 rounded-xl border border-gray-100 space-y-2">
+        {/* 진행 상태 카드: 진행 중 / 목표 달성·보상 대기 / 완료 */}
+        <div className={`bg-white p-4 rounded-xl space-y-2 ${!isCompleted && !isInProgress ? 'border-2 border-amber-300' : 'border border-gray-100'}`}>
           <div className="flex justify-between text-xs font-bold">
-            <span className={isCompleted ? 'text-emerald-600' : 'text-gray-700'}>{isCompleted ? '✓ 완료됨' : '진행중'}</span>
-            <span className="text-gray-500">{mission.goal}</span>
+            <span className={isCompleted ? 'text-emerald-600' : isInProgress ? 'text-gray-700' : 'text-amber-600'}>
+              {isCompleted ? '✓ 완료됨' : isInProgress ? '진행중' : '목표 달성 · 보상 대기'}
+            </span>
+            <span className="text-gray-500 tabular-nums">{progressLabel(mission, current)}</span>
           </div>
 
-          <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
-            <div className={`h-full ${isCompleted ? 'bg-emerald-500' : 'bg-emerald-400'} w-full`}></div>
+          <div
+            className="w-full bg-gray-100 h-2 rounded-full overflow-hidden"
+            role="progressbar"
+            aria-valuenow={progressPercent(mission, current)}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label="미션 진행률"
+          >
+            <div
+              className={`h-full ${isCompleted ? 'bg-emerald-500' : isInProgress ? 'bg-emerald-400' : 'bg-amber-400'}`}
+              style={{ width: `${progressPercent(mission, current)}%` }}
+            ></div>
           </div>
 
-          <p className="text-xs text-emerald-600 font-medium pt-1">
+          <p className={`text-xs font-medium pt-1 ${isInProgress ? 'text-gray-500' : isCompleted ? 'text-emerald-600' : 'text-amber-700'}`}>
             {isCompleted
               ? reward
                 ? `+${reward.earnedPoint} FP · +${reward.earnedXp} XP 획득 · 보상 지급 완료`
                 : '오늘 완료한 미션이에요 · 보상 지급 완료'
-              : '목표를 달성했어요! 보상을 받아보세요.'}
+              : isInProgress
+                ? `목표까지 ${remainingLabel(mission, current)} 남았어요. 목표를 채우면 보상을 받을 수 있어요.`
+                : '목표를 달성했어요! 보상을 받아보세요.'}
           </p>
         </div>
 
@@ -136,13 +160,15 @@ export const MissionDetail = () => {
         <button
           type="button"
           onClick={() => void handleComplete()}
-          disabled={submitting || (isCompleted && !reward)}
+          disabled={submitting || (isCompleted && !reward) || isInProgress}
           className={`w-full py-3.5 rounded-xl text-sm font-semibold transition inline-flex items-center justify-center gap-1.5 ${
             isCompleted
               ? reward
                 ? 'bg-white border border-emerald-500 text-emerald-700 cursor-pointer'
                 : 'bg-gray-200 text-gray-500 cursor-not-allowed'
-              : 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer disabled:cursor-wait'
+              : isInProgress
+                ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                : 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer disabled:cursor-wait'
           }`}
         >
           {submitting ? (
@@ -152,10 +178,12 @@ export const MissionDetail = () => {
             </>
           ) : isCompleted ? (
             reward ? '획득한 보상 확인' : '오늘 완료한 미션이에요'
+          ) : isInProgress ? (
+            '목표를 채우면 보상을 받을 수 있어요'
           ) : errorMessage ? (
             '다시 시도'
           ) : (
-            '미션 완료 및 보상 받기'
+            '보상 받기'
           )}
         </button>
         {errorMessage && (

@@ -2,7 +2,13 @@
 // 화면 → 공용 상태(progressStore) → ProgressApi 순서로만 접근한다.
 // 구현을 바꿔도(mock ↔ 실제 서버) 화면 코드는 바뀌지 않는다.
 
-import type { CharacterProgress, RepairMethod, RepairResult, StreakState } from './progressTypes.ts';
+import type {
+  CharacterProgress,
+  PointHistoryPage,
+  RepairMethod,
+  RepairResult,
+  StreakState,
+} from './progressTypes.ts';
 import type { DateKey } from '../domain/kst.ts';
 
 export type RepairRequest = {
@@ -21,6 +27,10 @@ export interface ProgressApi {
   getStreak(): Promise<StreakState>;
   /** POST /api/v1/streak/repair (API-11) */
   repairStreak(request: RepairRequest): Promise<RepairResult>;
+  /** GET /api/v1/points/balance (API-06) */
+  getBalance(): Promise<number>;
+  /** GET /api/v1/points/history?page=&size= (API-07). page는 1부터, 최신순 */
+  getPointHistory(page: number, size: number): Promise<PointHistoryPage>;
 }
 
 /** 요청 ID 생성 (오래된 브라우저 대비) */

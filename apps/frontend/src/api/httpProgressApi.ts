@@ -8,6 +8,9 @@ import type { ProgressApi, RepairRequest } from './progressApi.ts';
 import {
   ApiError,
   type CharacterProgress,
+  type PointHistoryPage,
+  type PointSource,
+  type PointTransaction,
   type RepairInfo,
   type RepairResult,
   type StreakState,
@@ -19,14 +22,42 @@ const num = (value: unknown, fallback = 0) => (typeof value === 'number' ? value
 const numOrNull = (value: unknown) => (typeof value === 'number' ? value : null);
 const strOrNull = (value: unknown) => (typeof value === 'string' ? value : null);
 
-const toApiError = (error: unknown): ApiError => {
+type ErrorBody = {
+  // 현재 백엔드 형식: { success: false, code, message }
+  code?: string;
+  message?: string;
+  details?: Record<string, unknown>;
+  // 설계서 8장 초안 형식: { error: { code, message, details } }
+  error?: { code?: string; message?: string; details?: Record<string, unknown> };
+};
+
+export const toApiError = (error: unknown): ApiError => {
   if (axios.isAxiosError(error)) {
-    const body = error.response?.data as { error?: { code?: string; message?: string; details?: Record<string, unknown> } } | undefined;
-    if (body?.error?.code) return new ApiError(body.error.code, body.error.message ?? '요청을 처리하지 못했어요.', body.error.details);
+    const body = error.response?.data as ErrorBody | undefined;
+    const code = body?.error?.code ?? body?.code;
+    if (code) {
+      return new ApiError(code, body?.error?.message ?? body?.message ?? '요청을 처리하지 못했어요.', body?.error?.details ?? body?.details);
+    }
+    if (error.response?.status === 404) return new ApiError('NOT_FOUND', '서버에 아직 준비되지 않은 기능이에요.');
     return new ApiError('NETWORK_ERROR', '연결이 불안정해 처리하지 못했어요. 잠시 후 다시 시도해 주세요.');
   }
   return new ApiError('UNKNOWN_ERROR', '알 수 없는 오류가 발생했어요.');
 };
+
+const POINT_SOURCES: PointSource[] = ['mission_complete', 'streak_repair', 'shop_purchase', 'reward_redeem'];
+
+/** API-07 거래 1건 (transaction_id, source, amount, created_at) → 화면 형식 */
+const mapTransaction = (raw: Raw): PointTransaction => ({
+  id: num(raw.transaction_id),
+  source: POINT_SOURCES.includes(raw.source as PointSource) ? (raw.source as PointSource) : 'mission_complete',
+  amount: num(raw.amount),
+  createdAt: String(raw.created_at ?? ''),
+  // TRD 응답에는 없음. 서버가 미션·아이템 이름을 주면 표시 (title 또는 description)
+  title: strOrNull(raw.title) ?? strOrNull(raw.description),
+});
+
+/** 응답 본문이 { success, data: ... } 이면 data, 아니면 그대로 */
+const unwrap = (data: Raw): Raw => ((data.data as Raw | undefined) && typeof data.data === 'object' ? (data.data as Raw) : data);
 
 const mapRepair = (raw: Raw): RepairInfo => ({
   status: (raw.status as RepairInfo['status']) ?? 'none',
@@ -88,7 +119,39 @@ export const httpProgressApi: ProgressApi = {
       // 응답 형식(8.4)이 일부 필드만 주므로 전체 상태는 다시 조회
       const { data: streak } = await api.get<Raw>('/streak');
       const { data: balance } = await api.get<Raw>('/points/balance');
-      return { streak: mapStreak(streak), balance: num(balance.balance) };
+      return { streak: mapStreak(unwrap(streak)), balance: num(unwrap(balance).balance) };
+    } catch (error) {
+      throw toApiError(error);
+    }
+  },
+
+  async getBalance(): Promise<number> {
+    try {
+      const { data } = await api.get<Raw>('/points/balance');
+      return num(unwrap(data).balance);
+    } catch (error) {
+      throw toApiError(error);
+    }
+  },
+
+  async getPointHistory(page: number, size: number): Promise<PointHistoryPage> {
+    try {
+      const { data } = await api.get<Raw>('/points/history', { params: { page, size } });
+      const body = unwrap(data);
+      // 거래 목록: 배열 그대로, 또는 { items | transactions: [...] }
+      const list = Array.isArray(data.data)
+        ? (data.data as Raw[])
+        : Array.isArray(body.items)
+          ? (body.items as Raw[])
+          : Array.isArray(body.transactions)
+            ? (body.transactions as Raw[])
+            : Array.isArray(data)
+              ? (data as unknown as Raw[])
+              : [];
+      const items = list.map(mapTransaction);
+      // 다음 페이지 여부: 서버가 주면 사용, 없으면 받은 개수로 추정
+      const hasMore = typeof body.has_more === 'boolean' ? body.has_more : items.length === size;
+      return { items, hasMore };
     } catch (error) {
       throw toApiError(error);
     }

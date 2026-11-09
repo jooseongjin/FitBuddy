@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Eye, EyeOff, AlertCircle } from 'lucide-react';
 import api from '../api/axios';
+import { saveLoginUser } from '../lib/profileStorage';
 
 export const Login: React.FC = () => {
   const navigate = useNavigate();
@@ -23,6 +24,8 @@ export const Login: React.FC = () => {
       // API-02 로그인 API 호출
       const res = await api.post('/auth/login', { user_id: userId, password });
       localStorage.setItem('token', res.data.token);
+      // 로그인한 계정 정보(user_number, user_id, nickname)를 마이페이지 프로필에 그대로 사용
+      saveLoginUser(res.data.user);
       navigate('/dashboard');
     } catch (err: any) {
       if (err.response?.status === 401) {

@@ -241,7 +241,7 @@ export const Shop: React.FC = () => {
 
     // 구매 전 클라이언트에서 잔액 선검증 (FP만 차감 — XP·레벨은 바뀌지 않음)
     setEffectSeq((previous) => previous + 1);
-    if (!spendFitPoint(entry.price)) {
+    if (!spendFitPoint(entry.price, entry.name)) {
       setFeedback({ type: 'insufficient', entry, shortage: entry.price - fitPoint });
       return;
     }
