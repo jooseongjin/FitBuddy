@@ -25,7 +25,8 @@ export const Login: React.FC = () => {
       const res = await api.post('/auth/login', { user_id: userId, password });
       localStorage.setItem('token', res.data.token);
       // 로그인한 계정 정보(user_number, user_id, nickname)를 마이페이지 프로필에 그대로 사용
-      saveLoginUser(res.data.user);
+      // 로그인 응답에 이메일이 없어, 이메일로 로그인한 경우에만 입력한 이메일을 함께 저장
+      saveLoginUser(res.data.user, userId.includes('@') ? { email: userId } : undefined);
       navigate('/dashboard');
     } catch (err: any) {
       if (err.response?.status === 401) {

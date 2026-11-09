@@ -73,13 +73,24 @@ const userIdFromToken = (): string | null => {
   }
 };
 
-type SessionUser = { user_number: number; user_id: string; nickname: string };
+/** 로그인한 계정. email은 로그인 응답에 없어 회원가입 화면에서 받은 값만 저장 */
+type SessionUser = { user_number: number; user_id: string; nickname: string; email?: string };
+
+const readStoredSession = (): SessionUser | null => {
+  try {
+    const session = JSON.parse(read(SESSION_USER_KEY) ?? 'null') as SessionUser | null;
+    return session && typeof session.user_id === 'string' ? session : null;
+  } catch {
+    return null;
+  }
+};
 
 /**
- * 로그인 성공 시 응답의 user를 저장 (Login.tsx). 프로필 화면이 이 값을 그대로 보여준다
+ * 로그인 성공 시 응답의 user를 저장 (Login.tsx, 회원가입 직후 자동 로그인 Signup.tsx). 프로필 화면이 이 값을 그대로 보여준다
+ * @param extra 회원가입 화면에서 입력한 이메일 (로그인 응답에 없음)
  * @returns 저장 성공 여부
  */
-export const saveLoginUser = (user: unknown): boolean => {
+export const saveLoginUser = (user: unknown, extra?: { email?: string }): boolean => {
   const raw = user as Partial<SessionUser> | null;
   if (!raw || typeof raw.user_id !== 'string') {
     // 응답에 user가 없으면 이전 계정 정보가 남지 않도록 지움 (토큰의 아이디만 사용)
@@ -91,10 +102,15 @@ export const saveLoginUser = (user: unknown): boolean => {
     return false;
   }
   try {
+    // 같은 계정으로 다시 로그인하면 가입 때 저장한 이메일을 유지
+    const previous = readStoredSession();
+    const keptEmail = previous?.user_id === raw.user_id ? previous.email : undefined;
     const session: SessionUser = {
       user_number: typeof raw.user_number === 'number' ? raw.user_number : 0,
       user_id: raw.user_id,
       nickname: typeof raw.nickname === 'string' ? raw.nickname : '',
+      // 우선순위: 화면에서 받은 이메일 → 로그인 응답의 email(백엔드가 추가하면 바로 사용) → 같은 계정의 이전 값
+      email: extra?.email?.trim() || (typeof (raw as { email?: unknown }).email === 'string' ? (raw as { email: string }).email : undefined) || keptEmail,
     };
     localStorage.setItem(SESSION_USER_KEY, JSON.stringify(session));
     return true;
@@ -133,7 +149,7 @@ const readSavedAccount = (owner: string): Partial<Pick<Profile, 'nickname' | 'em
 export const readProfile = (): Profile => {
   const session = readSessionUser();
   const base = session
-    ? { userNumber: session.user_number, userId: session.user_id, nickname: session.nickname, email: '', joinedAt: null, isMock: false }
+    ? { userNumber: session.user_number, userId: session.user_id, nickname: session.nickname, email: session.email ?? '', joinedAt: null, isMock: false }
     : { ...MOCK_ACCOUNT, isMock: true };
   const saved = readSavedAccount(base.userId);
   const goal = read(GOAL_KEY);

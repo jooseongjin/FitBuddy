@@ -186,6 +186,14 @@ export const ProfileEdit: React.FC = () => {
               onChange={(email) => update({ email })}
               error={errors.email}
               placeholder="이메일 주소를 입력해 주세요"
+              help={
+                // 로그인 응답에 이메일이 없어 처음부터 비어 있는 경우 이유와 방법 안내
+                !initial.isMock && !initial.email ? (
+                  <p className="text-[11px] text-gray-400">
+                    로그인 정보에 이메일이 없어 비어 있어요. 직접 입력해 저장하거나, 이메일로 로그인하면 자동으로 채워져요.
+                  </p>
+                ) : undefined
+              }
             />
             <ReadOnlyRow label="아이디" icon={<UserRound size={13} aria-hidden="true" />} value={initial.userId} note="아이디는 바꿀 수 없어요" />
             <ReadOnlyRow label="가입일" icon={<CalendarDays size={13} aria-hidden="true" />} value={initial.joinedAt ? formatJoinedAt(initial.joinedAt) : '정보 없음'} />
