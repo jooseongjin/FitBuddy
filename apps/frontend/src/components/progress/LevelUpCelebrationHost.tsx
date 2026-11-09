@@ -3,7 +3,6 @@ import { useProgress } from '../../context/progressStore';
 import { useCharacterStore } from '../../context/characterStore';
 import { EMPTY_EQUIPPED, findCharacter, getEquippedParts } from '../../data/characterItems';
 import { LevelUpCelebration } from './LevelUpCelebration';
-import { CHARACTER_NICKNAME } from '../../config/progressConfig';
 
 /**
  * 공용 상태에 축하가 있으면 모달을 띄운다 (ProgressStoreProvider가 한 번만 렌더링)
@@ -24,7 +23,7 @@ export const LevelUpCelebrationHost: React.FC = () => {
       from={celebration.from}
       to={celebration.to}
       equippedParts={parts}
-      characterName={CHARACTER_NICKNAME}
+      characterName={character.name}
       onClose={dismissCelebration}
     />
   );
