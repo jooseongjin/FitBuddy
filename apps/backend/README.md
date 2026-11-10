@@ -11,7 +11,7 @@ npm start                   # http://localhost:4000
 npm test                    # 통합 테스트 (migrate:reset 후 실행)
 ```
 - `npm run migrate` 는 DB가 이미 있으면 중단합니다. `migrate:reset` 은 **기존 데이터를 모두 삭제**합니다.
-- `db/` 의 SQL 파일은 번호 순서(001 → 006)대로 실행됩니다.
+- `db/` 의 SQL 파일은 번호 순서(001 → 007)대로 실행됩니다.
 - 이미 운영 중인 DB(배포 서버 등)에 새 파일만 적용할 때: `npm run migrate -- --from 005`
   (기존 데이터 유지, 005 이상 번호만 실행. 005·006은 여러 번 실행해도 중복되지 않음)
 
@@ -76,3 +76,18 @@ const missions = await getTodayMissions(req.user.user_number); // KST 오늘, �
   - 점수: 목표 태그 일치 3 + 난이도 근접도(일치 2 / 한 단계 차이 1)
   - 최근 7일 미션은 후순위(부족하면 오래된 것부터 재배정 → 매일 3개 보장), 근력·유산소·스트레칭 분산
 - 테스트: `test/recommend.test.js` (R-01~R-08)
+
+## 건강 데이터 연동·미션 인증 DB (`db/007_health_activity.sql`)
+모바일 앱이 OS 헬스허브(Android Health Connect / iOS HealthKit)에서 읽은 데이터를 저장하는 테이블입니다.
+앱은 MySQL에 직접 접속하지 않고, 지금처럼 백엔드 API(`/api/v1`)를 통해 저장·조회합니다.
+
+| 테이블 | 용도 |
+|---|---|
+| Health_connections | 사용자별 헬스허브 연결 상태, 마지막 동기화 시각 |
+| Activity_records | 헬스허브 원본 기록(걸음·운동 세션 등). `is_trusted` 는 DB가 계산(직접 입력·출처 불명 = 0) |
+| Daily_activity | 하루 합계(걸음 수, 운동 시간, kcal) — 대시보드 표시용 |
+| Mission_verify_rules | 미션별 인증 기준(걷기 = 걸음 수, 그 밖의 분 단위 = 운동 시간). 횟수 미션은 기준 없음 |
+| Mission_verifications | 미션 인증 결과와 보상 배율(verified 1.00 / unverified 0.50 / rejected 0.00) |
+
+- 부정 방지: 같은 기록(`platform` + `external_id`)은 재전송·다른 계정 전송 불가, 운동 기록 1건은 미션 1건에만 사용
+- 테스트: `test/health_db.test.js` (H-01~H-06)
