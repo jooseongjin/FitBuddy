@@ -6,6 +6,12 @@
 const KEY_PREFIX = 'fb.celebratedLevel.';
 let memoryValue: number | null = null;
 
+// mock 모드는 레벨·XP가 탭 단위로 초기화되므로 축하 기록도 탭 단위(sessionStorage)로 맞춘다
+// (브라우저에 계속 남기면 새 탭에서 Lv.8로 다시 시작해도 Lv.9 축하가 '이미 본 것'으로 처리돼 안 뜸)
+// 실제 서버 모드(VITE_PROGRESS_API=http)는 레벨이 서버에 남으므로 브라우저(localStorage)에 계속 저장
+const isMockMode = (import.meta as { env?: Record<string, string> }).env?.VITE_PROGRESS_API !== 'http';
+const store = (): Storage => (isMockMode ? sessionStorage : localStorage);
+
 /** 로그인 사용자 구분값. 아직 사용자 ID를 저장하지 않아 기본값 사용 (로그인 연동 시 교체) */
 export const currentUserKey = (): string => {
   try {
@@ -17,7 +23,7 @@ export const currentUserKey = (): string => {
 
 export const readCelebratedLevel = (userKey = currentUserKey()): { available: boolean; level: number | null } => {
   try {
-    const raw = localStorage.getItem(KEY_PREFIX + userKey);
+    const raw = store().getItem(KEY_PREFIX + userKey);
     const level = raw === null ? null : Number(raw);
     return { available: true, level: level !== null && Number.isFinite(level) ? level : null };
   } catch {
@@ -28,7 +34,7 @@ export const readCelebratedLevel = (userKey = currentUserKey()): { available: bo
 export const writeCelebratedLevel = (level: number, userKey = currentUserKey()) => {
   memoryValue = level;
   try {
-    localStorage.setItem(KEY_PREFIX + userKey, String(level));
+    store().setItem(KEY_PREFIX + userKey, String(level));
   } catch {
     // 저장소 사용 불가: 메모리 값만 유지
   }
@@ -38,7 +44,7 @@ export const writeCelebratedLevel = (level: number, userKey = currentUserKey()) 
 export const clearCelebratedLevel = (userKey = currentUserKey()) => {
   memoryValue = null;
   try {
-    localStorage.removeItem(KEY_PREFIX + userKey);
+    store().removeItem(KEY_PREFIX + userKey);
   } catch {
     // 무시
   }

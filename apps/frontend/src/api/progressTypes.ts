@@ -65,7 +65,28 @@ export type MissionRewardResult = {
   balance: number;
 };
 
-/** 서버 공통 오류 { error: { code, message, details } } */
+/** FitPoint 거래 원인 (TRD Point_transactions.source) */
+export type PointSource = 'mission_complete' | 'streak_repair' | 'shop_purchase' | 'reward_redeem';
+
+/** FitPoint 거래 1건 (API-07 GET /points/history의 거래 목록 항목) */
+export type PointTransaction = {
+  id: number;
+  source: PointSource;
+  /** 실제 증감. 적립은 +, 사용은 − */
+  amount: number;
+  /** ISO 8601 (KST +09:00) */
+  createdAt: string;
+  /** 화면 표시용 설명 (미션 이름·아이템 이름). 서버 응답에 없으면 null → 원인 이름만 표시 */
+  title: string | null;
+};
+
+export type PointHistoryPage = {
+  items: PointTransaction[];
+  /** 다음 페이지가 있으면 true */
+  hasMore: boolean;
+};
+
+/** 서버 공통 오류. 백엔드 응답 { success: false, code, message } 또는 { error: { code, message } } */
 export class ApiError extends Error {
   readonly code: string;
   readonly details?: Record<string, unknown>;

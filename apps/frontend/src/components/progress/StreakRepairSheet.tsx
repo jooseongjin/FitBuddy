@@ -49,6 +49,7 @@ export const StreakRepairSheet: React.FC<StreakRepairSheetProps> = ({
   const [method, setMethod] = useState<RepairMethod>(freeAvailable ? 'free' : 'points');
   const [phase, setPhase] = useState<Phase>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
   const requestIdRef = useRef<string | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const submitting = phase === 'submitting';
@@ -84,6 +85,7 @@ export const StreakRepairSheet: React.FC<StreakRepairSheetProps> = ({
     } catch (error) {
       setPhase('error');
       setErrorMessage(error instanceof ApiError ? error.message : '복구하지 못했어요. 다시 시도해 주세요.');
+      setErrorCode(error instanceof ApiError ? error.code : 'UNKNOWN_ERROR');
       // 상태가 바뀌어 다시 보낼 수 없는 오류면 새 요청으로
       if (error instanceof ApiError && error.code !== 'NETWORK_ERROR') requestIdRef.current = null;
     }
@@ -106,7 +108,7 @@ export const StreakRepairSheet: React.FC<StreakRepairSheetProps> = ({
         aria-modal="true"
         aria-labelledby="repair-title"
         onClick={(event) => event.stopPropagation()}
-        className="w-full max-w-md bg-[#F8F5EC] rounded-t-3xl px-4 pt-2.5 pb-6 shadow-2xl outline-none animate-fb-sheet-up max-h-[90vh] overflow-y-auto"
+        className="w-full max-w-md bg-[#F8F5EC] rounded-t-3xl px-4 pt-2.5 pb-[max(1.5rem,env(safe-area-inset-bottom))] shadow-2xl outline-none animate-fb-sheet-up max-h-[90vh] overflow-y-auto"
       >
         <div className="mx-auto mb-3 h-1.5 w-10 rounded-full bg-gray-300" aria-hidden="true" />
         <div className="flex items-start justify-between gap-3">
@@ -188,7 +190,7 @@ export const StreakRepairSheet: React.FC<StreakRepairSheetProps> = ({
                 <CircleAlert size={14} className="mt-px shrink-0 text-rose-600" aria-hidden="true" />
                 <div className="text-[12px]">
                   <p className="font-bold text-rose-600">{errorMessage}</p>
-                  <p className="text-gray-500">다시 시도해도 FitPoint는 한 번만 사용돼요.</p>
+                  <p className="text-gray-500">{errorNextStep(errorCode)}</p>
                 </div>
               </div>
             )}
@@ -243,6 +245,25 @@ export const StreakRepairSheet: React.FC<StreakRepairSheetProps> = ({
       </div>
     </div>
   );
+};
+
+/** 복구 실패 시 사용자가 다음에 할 일 */
+const errorNextStep = (code: string | null): string => {
+  switch (code) {
+    case 'NETWORK_ERROR':
+    case 'UNKNOWN_ERROR':
+      return '[다시 시도]를 눌러 주세요. 다시 시도해도 FitPoint는 한 번만 사용돼요.';
+    case 'INSUFFICIENT_POINTS':
+      return '미션을 완료해 FitPoint를 모은 뒤 다시 복구해 주세요.';
+    case 'NO_FREE_REPAIR':
+    case 'PREMIUM_REQUIRED':
+      return 'FitPoint로 복구를 선택해 다시 시도해 주세요.';
+    case 'IDEMPOTENCY_KEY_REUSED':
+      return '[다시 시도]를 누르면 새 요청으로 처리해요.';
+    default:
+      // 날짜 변경·횟수 소진·이미 복구됨 등: 최신 상태를 다시 불러와 화면이 바뀜
+      return '최신 기록을 다시 불러왔어요. 바뀐 안내를 확인해 주세요.';
+  }
 };
 
 const SheetHeader: React.FC<{ status: StreakState['repair']['status'] }> = ({ status }) => {

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { progressApi } from '../api/progressClient';
 import { ApiError, type CharacterProgress, type MissionRewardResult, type StreakState } from '../api/progressTypes';
 import type { RepairRequest } from '../api/progressApi';
@@ -11,8 +11,6 @@ import { LevelUpCelebrationHost } from '../components/progress/LevelUpCelebratio
 // 날짜가 바뀌었거나 이미 처리된 복구 요청 → 최신 상태를 다시 불러옴
 const REFRESH_ON_ERROR = new Set(['MISSED_DATE_MISMATCH', 'STREAK_NOT_BROKEN', 'ALREADY_REPAIRED', 'STREAK_NOT_REPAIRABLE', 'MONTHLY_LIMIT_EXCEEDED']);
 
-type WalletAware = { attachWallet?: (read: () => number) => void };
-
 const loadProgress = () => Promise.all([progressApi.getCharacterProgress(), progressApi.getStreak()]);
 
 /**
@@ -20,7 +18,7 @@ const loadProgress = () => Promise.all([progressApi.getCharacterProgress(), prog
  * 레벨업 축하 모달도 여기서 띄워, 어느 화면에서 미션 보상을 반영해도 같은 규칙으로 표시된다.
  */
 export const ProgressStoreProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { fitPoint, setFitPoint } = useCharacterStore();
+  const { setFitPoint } = useCharacterStore();
   const [character, setCharacter] = useState<CharacterProgress | null>(null);
   const [streak, setStreak] = useState<StreakState | null>(null);
   const [status, setStatus] = useState<LoadStatus>('loading');
@@ -28,15 +26,6 @@ export const ProgressStoreProvider: React.FC<{ children: React.ReactNode }> = ({
   const [celebration, setCelebration] = useState<Celebration | null>(null);
   // 보상 모달 등 다른 화면 위에 바로 겹치지 않도록 잠시 미뤄 둔 축하
   const [deferredCelebration, setDeferredCelebration] = useState<Celebration | null>(null);
-
-  // mock 서버가 공용 FP 잔액을 읽을 수 있게 연결 (실제 서버는 잔액을 서버가 가짐)
-  const fitPointRef = useRef(fitPoint);
-  useEffect(() => {
-    fitPointRef.current = fitPoint;
-  }, [fitPoint]);
-  useEffect(() => {
-    (progressApi as WalletAware).attachWallet?.(() => fitPointRef.current);
-  }, []);
 
   const applyLoaded = useCallback((nextCharacter: CharacterProgress, nextStreak: StreakState) => {
     setCharacter(nextCharacter);

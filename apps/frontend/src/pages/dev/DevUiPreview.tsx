@@ -5,7 +5,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { FlaskConical, Play } from 'lucide-react';
-import { mockProgressServer, type FailMode, type StreakScenario } from '../../mocks/mockProgressServer';
+import { MOCK_INITIAL_BALANCE, mockProgressServer, type FailMode, type StreakScenario } from '../../mocks/mockProgressServer';
 import { MOCK_POLICY } from '../../mocks/mockPolicy';
 import { progressApi } from '../../api/progressClient';
 import { ApiError, type CharacterProgress, type MissionRewardResult, type Plan, type RepairInfo, type StreakState } from '../../api/progressTypes';
@@ -90,7 +90,7 @@ type SheetPreview = {
 export const DevUiPreview: React.FC = () => {
   const isMockApi = progressApi === mockProgressServer;
   const progress = useProgress();
-  const { fitPoint, setFitPoint, currentCharacterId, equippedByCharacter } = useCharacterStore();
+  const { fitPoint, setFitPoint, currentCharacterId, equippedByCharacter, resetCharacterState } = useCharacterStore();
   const [, setVersion] = useState(0);
   useEffect(() => mockProgressServer.subscribe(() => setVersion((v) => v + 1)), []);
   const snapshot = mockProgressServer.devSnapshot();
@@ -245,7 +245,7 @@ export const DevUiPreview: React.FC = () => {
           <Panel title="① mock 서버 조작" note="값을 바꾸면 공용 상태를 다시 불러와 상점·마이페이지에도 그대로 반영돼요.">
             <div className="space-y-2.5">
               <Row label={`FP ${fitPoint.toLocaleString()}`}>
-                <Btn onClick={() => setFitPoint(2480)}>2,480 (기본)</Btn>
+                <Btn onClick={() => setFitPoint(MOCK_INITIAL_BALANCE)}>{MOCK_INITIAL_BALANCE.toLocaleString()} (기본)</Btn>
                 <Btn onClick={() => setFitPoint(120)}>120 (부족)</Btn>
                 <Btn onClick={() => setFitPoint(10000)}>10,000</Btn>
               </Row>
@@ -307,10 +307,15 @@ export const DevUiPreview: React.FC = () => {
               <Row label={`축하 기록 ${stored.level ?? '없음'}`}>
                 <Btn onClick={() => { clearCelebratedLevel(); setVersion((v) => v + 1); }}>지우기 (첫 진입 상태)</Btn>
               </Row>
+              <Row label="오늘 미션 목표">
+                <Btn onClick={() => apply(() => mockProgressServer.devAchieveAllMissions())}>모두 달성 (보상 대기)</Btn>
+                <Btn onClick={() => apply(() => mockProgressServer.devResetMissionProgress())}>시작값으로</Btn>
+              </Row>
               <Row label="전체">
-                <Btn tone="rose" onClick={() => { setFitPoint(2480); apply(() => mockProgressServer.devReset()); }}>
+                <Btn tone="rose" onClick={() => { resetCharacterState(); apply(() => mockProgressServer.devReset()); }}>
                   mock 초기화
                 </Btn>
+                <Btn onClick={() => { clearCelebratedLevel(); apply(() => mockProgressServer.devSetFirstUser()); }}>첫 사용자 (잔액·내역 0)</Btn>
                 <Btn onClick={() => void progress.refresh()}>다시 불러오기</Btn>
               </Row>
             </div>

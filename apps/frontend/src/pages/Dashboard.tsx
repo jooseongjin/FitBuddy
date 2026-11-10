@@ -9,16 +9,20 @@ import { StreakRepairSheet } from '../components/progress/StreakRepairSheet';
 import { Toast } from '../components/progress/Toast';
 import { useProgress } from '../context/progressStore';
 import { useCharacterStore } from '../context/characterStore';
-import { useCompletedMissions } from '../hooks/useCompletedMissions';
-import { TODAY_MISSIONS } from '../data/missions';
+import { useMissionStates } from '../hooks/useMissionStates';
+import { TODAY_MISSIONS, progressLabel } from '../data/missions';
+import { MISSION_BADGE } from '../components/missionBadge';
+import { displayName, readProfile } from '../lib/profileStorage';
 
 export const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const { streak, isMock, repairStreak } = useProgress();
   const { fitPoint } = useCharacterStore();
-  const completed = useCompletedMissions();
+  const states = useMissionStates();
   const [repairOpen, setRepairOpen] = useState(false);
   const [toast, setToast] = useState<{ message: string; seq: number } | null>(null);
+  // 마이페이지 프로필 수정에서 저장한 닉네임 + '님'
+  const [greetingName] = useState(() => displayName(readProfile().nickname));
 
   const goMissions = useCallback(() => navigate('/missions'), [navigate]);
   const closeRepair = useCallback(() => setRepairOpen(false), []);
@@ -28,14 +32,14 @@ export const Dashboard: React.FC = () => {
     setToast((previous) => ({ message: `${keptDays}일 연속 기록을 지켰어요!`, seq: (previous?.seq ?? 0) + 1 }));
   }, []);
 
-  const doneCount = TODAY_MISSIONS.filter((mission) => completed.includes(mission.id)).length;
+  const doneCount = TODAY_MISSIONS.filter((mission) => states[mission.id].status === 'done').length;
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20 max-w-md mx-auto shadow-md">
       {/* 상단 헤더 */}
       <div className="bg-white p-4 sticky top-0 border-b border-gray-100 flex justify-between items-center z-10">
         <div>
-          <h1 className="text-base font-bold text-gray-800">사용자님, 오늘도 가볍게!</h1>
+          <h1 className="text-base font-bold text-gray-800">{greetingName}, 오늘도 가볍게!</h1>
           <HeaderStatus />
         </div>
       </div>
@@ -93,29 +97,25 @@ export const Dashboard: React.FC = () => {
 
           <div className="space-y-2">
             {TODAY_MISSIONS.map((mission) => {
-              const done = completed.includes(mission.id);
+              const { status, current } = states[mission.id];
+              const done = status === 'done';
+              const badge = MISSION_BADGE[status];
               return (
                 <button
                   key={mission.id}
                   type="button"
                   onClick={() => navigate(`/missions/${mission.id}`)}
                   className={`w-full text-left bg-white p-4 rounded-xl flex justify-between items-center cursor-pointer transition ${
-                    done ? 'border border-gray-200' : 'border-2 border-emerald-500'
+                    done ? 'border border-gray-200' : status === 'ready' ? 'border-2 border-amber-400' : 'border-2 border-emerald-500'
                   }`}
                 >
                   <div>
                     <p className="text-xs font-bold text-gray-800">{mission.title}</p>
                     <p className={`text-[11px] mt-0.5 ${done ? 'text-gray-400' : 'text-emerald-600 font-semibold'}`}>
-                      {done ? `${mission.goal} 완료` : mission.progress}
+                      {done ? `${progressLabel(mission, current)} 완료` : progressLabel(mission, current)}
                     </p>
                   </div>
-                  <span
-                    className={`text-xs font-semibold px-3 py-1.5 rounded-lg ${
-                      done ? 'bg-gray-100 text-gray-500' : 'bg-emerald-100 text-emerald-700'
-                    }`}
-                  >
-                    {done ? '완료됨' : '진행중'}
-                  </span>
+                  <span className={`text-xs font-semibold px-3 py-1.5 rounded-lg whitespace-nowrap ${badge.className}`}>{badge.label}</span>
                 </button>
               );
             })}

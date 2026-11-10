@@ -10,6 +10,9 @@ import { Missions } from './pages/Missions';
 import { MissionDetail } from './pages/MissionDetail';
 import { Shop } from './pages/Shop';
 import { MyPage } from './pages/MyPage';
+import { PointHistory } from './pages/PointHistory';
+import { ProfileEdit } from './pages/ProfileEdit';
+import { WorkoutReminder } from './components/WorkoutReminder';
 import { CharacterStoreProvider } from './context/CharacterStoreProvider';
 import { ProgressStoreProvider } from './context/ProgressStoreProvider';
 
@@ -22,6 +25,7 @@ function App() {
       {/* 상점/마이페이지가 공유하는 FitPoint·보유·착용 상태 + 레벨·XP·Streak 상태 */}
       <CharacterStoreProvider>
         <ProgressStoreProvider>
+        <WorkoutReminder />
         <Routes>
           <Route path="/" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
@@ -33,6 +37,8 @@ function App() {
           <Route path="/missions/:id" element={<MissionDetail />} />
           <Route path="/shop" element={<Shop />} />
           <Route path="/mypage" element={<MyPage />} />
+          <Route path="/mypage/profile" element={<ProfileEdit />} />
+          <Route path="/points" element={<PointHistory />} />
           {DevUiPreview && (
             <Route
               path="/dev/ui"
