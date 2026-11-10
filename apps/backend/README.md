@@ -11,7 +11,9 @@ npm start                   # http://localhost:4000
 npm test                    # 통합 테스트 (migrate:reset 후 실행)
 ```
 - `npm run migrate` 는 DB가 이미 있으면 중단합니다. `migrate:reset` 은 **기존 데이터를 모두 삭제**합니다.
-- `db/` 의 SQL 파일은 번호 순서(001 → 003)대로 실행됩니다.
+- `db/` 의 SQL 파일은 번호 순서(001 → 006)대로 실행됩니다.
+- 이미 운영 중인 DB(배포 서버 등)에 새 파일만 적용할 때: `npm run migrate -- --from 005`
+  (기존 데이터 유지, 005 이상 번호만 실행. 005·006은 여러 번 실행해도 중복되지 않음)
 
 ## API (모두 `/api/v1`)
 요청·응답 필드명은 **snake_case** (TRD, 프론트와 동일). 모든 응답에 `success` 가 있습니다.
@@ -57,4 +59,20 @@ npm test                    # 통합 테스트 (migrate:reset 후 실행)
 - 비밀번호는 bcrypt 해시로만 저장합니다.
 - 로그인 실패는 아이디 없음/비밀번호 틀림 모두 같은 401 응답입니다.
 - 인증 미들웨어는 `req.user = { user_number, user_id }` 를 넣어줍니다 (미션·포인트 컨트롤러에서 사용).
-- 추천 엔진: `db/003_recommend.sql` 의 `CALL sp_assign_daily_missions(user_number, 'YYYY-MM-DD')` (오늘 배정이 이미 있으면 아무것도 하지 않음)
+
+## 추천 엔진 (오늘의 맞춤 미션)
+미션 API는 **`src/services/recommend.js` 의 `getTodayMissions(user_number)` 하나만 호출**하면 됩니다.
+```js
+const { getTodayMissions } = require('../services/recommend');
+const missions = await getTodayMissions(req.user.user_number); // KST 오늘, 배정 없으면 자동 배정
+// → [{ user_mission_id, mission_id, title, description, exercise_type, environment,
+//      target_value, target_unit, difficulty, base_point, mission_status, completed_at }, ...] (3개)
+```
+- 온보딩을 안 한 사용자는 `ApiError 409 ONBOARDING_REQUIRED` 를 던집니다 (`next(e)` 로 넘기면 공통 오류 응답).
+- 같은 날 여러 번 호출해도 처음 배정된 3개를 돌려줍니다.
+- 규칙은 `db/006_recommend_v2.sql` 의 `sp_assign_daily_missions` (003의 v1을 교체):
+  - 필터: 운동 장소, 피할 동작(실내만), 불편 부위, 기준 난이도 ±1단계
+  - 기준 난이도: 운동 경험 + 최근 7일 완료율(80% 이상 한 단계 ↑, 30% 미만 한 단계 ↓)
+  - 점수: 목표 태그 일치 3 + 난이도 근접도(일치 2 / 한 단계 차이 1)
+  - 최근 7일 미션은 후순위(부족하면 오래된 것부터 재배정 → 매일 3개 보장), 근력·유산소·스트레칭 분산
+- 테스트: `test/recommend.test.js` (R-01~R-08)
