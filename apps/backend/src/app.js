@@ -3,7 +3,6 @@ const express = require('express');
 const cors = require('cors');
 const { errorHandler } = require('./errors');
 
-// 라우터 파일 불러오기
 const missionRouter = require('./routes/missions');
 const pointRouter = require('./routes/points');
 
@@ -16,7 +15,6 @@ app.get('/health', (req, res) => res.json({ ok: true }));
 app.use('/api/v1/auth', require('./routes/auth'));
 app.use('/api/v1/onboarding', require('./routes/onboarding'));
 
-// 주석 해제하여 라우터 등록
 app.use('/api/v1/missions', missionRouter);
 app.use('/api/v1/points', pointRouter);
 
