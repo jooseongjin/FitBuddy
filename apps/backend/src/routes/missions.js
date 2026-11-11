@@ -1,7 +1,8 @@
 const express = require('express');
 const pool = require('../db');
 const auth = require('../middleware/auth');
-const { generateAndAssignMissions } = require('../services/recommend');
+const recommendModule = require('../services/recommend'); // 객체든 함수든 안전하게 받기 위해 모듈 통째로 임포트
+const missionController = require('../controllers/missionController');
 const { ApiError } = require('../errors');
 
 const router = express.Router();
@@ -24,9 +25,17 @@ router.get('/today', auth, async (req, res, next) => {
         // 2. 오늘 배정된 미션이 없다면 추천 엔진을 통해 미션 생성/배정 후 재조회
         if (rows.length === 0) {
             try {
-                await generateAndAssignMissions(userNumber);
+                // recommend.js가 내보내는 방식(단일 함수 vs 객체 내부 메서드)에 맞게 유연하게 실행
+                if (typeof recommendModule === 'function') {
+                    await recommendModule(userNumber);
+                } else if (recommendModule && typeof recommendModule.generateAndAssignMissions === 'function') {
+                    await recommendModule.generateAndAssignMissions(userNumber);
+                } else if (recommendModule && typeof recommendModule.recommendMissions === 'function') {
+                    await recommendModule.recommendMissions(userNumber);
+                } else {
+                    console.error('recommend.js에서 유효한 함수를 찾지 못했습니다.');
+                }
             } catch (err) {
-                // 추천 엔진 연동 중 에러 발생 시 로그를 남기거나 넘어갈 수 있음
                 console.error('Recommend engine auto-assignment failed:', err);
             }
 
@@ -46,5 +55,31 @@ router.get('/today', auth, async (req, res, next) => {
         conn.release();
     }
 });
+
+// 3. POST /api/v1/missions/today/:missionId/complete - 미션 완료 처리 라우트 추가
+if (missionController && typeof missionController.completeMission === 'function') {
+    router.post('/today/:missionId/complete', auth, missionController.completeMission);
+} else {
+    router.post('/today/:missionId/complete', auth, async (req, res, next) => {
+        const conn = await pool.getConnection();
+        try {
+            const userNumber = req.user.userNumber;
+            const { missionId } = req.params;
+
+            await conn.query(
+                `UPDATE User_missions 
+                 SET mission_status = 'completed', completed_at = NOW() 
+                 WHERE Users_user_number = ? AND Missions_id = ? AND assigned_date = CURDATE()`,
+                [userNumber, missionId]
+            );
+
+            res.status(200).json({ success: true, message: '미션이 성공적으로 완료되었습니다.' });
+        } catch (e) {
+            next(e);
+        } finally {
+            conn.release();
+        }
+    });
+}
 
 module.exports = router;
