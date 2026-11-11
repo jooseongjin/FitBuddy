@@ -27,8 +27,8 @@ app.get('/health', (req, res) => res.json({ ok: true }));
 app.use('/api/v1/auth', require('./routes/auth'));
 app.use('/api/v1/onboarding', require('./routes/onboarding'));
 // 미션·포인트 API(박상욱 담당)는 해당 PR에서 아래처럼 등록
-// app.use('/api/v1/missions', require('./routes/missions'));
-// app.use('/api/v1/points', require('./routes/points'));
+
+
 app.use((req, res) => res.status(404).json({ success: false, code: 'NOT_FOUND', message: '존재하지 않는 경로입니다.' }));
 app.use(errorHandler);
 
