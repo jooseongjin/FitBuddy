@@ -1,13 +1,30 @@
-// 전역 에러 핸들러 미들웨어
-const errorHandler = (err, req, res, next) => {
-    console.error('Unhandled Error:', err);
-    res.status(err.status || 500).json({
-        success: false,
-        error: {
-            code: err.code || 'INTERNAL_SERVER_ERROR',
-            message: err.message || '서버 내부 오류가 발생했습니다.'
-        }
-    });
-};
+class ApiError extends Error {
+  constructor(status, code, message) {
+    super(message);
+    this.status = status;
+    this.code = code;
+  }
+}
 
-module.exports = { errorHandler };
+// 공통 에러 응답: { success: false, code, message }
+// (missionController 등 기존 코드의 { success, message } 형식에 맞춤)
+function errorHandler(err, req, res, next) { // eslint-disable-line
+  if (err instanceof ApiError) {
+    return res.status(err.status).json({ success: false, code: err.code, message: err.message });
+  }
+  if (err && err.name === 'ZodError') {
+    return res.status(400).json({
+      success: false,
+      code: 'VALIDATION_ERROR',
+      message: '입력값이 올바르지 않습니다.',
+      details: err.issues.map((i) => ({ field: i.path.join('.'), message: i.message })),
+    });
+  }
+  if (err && err.type === 'entity.parse.failed') {
+    return res.status(400).json({ success: false, code: 'INVALID_JSON', message: 'JSON 형식이 올바르지 않습니다.' });
+  }
+  console.error(err);
+  res.status(500).json({ success: false, code: 'INTERNAL_ERROR', message: '서버 오류가 발생했습니다.' });
+}
+
+module.exports = { ApiError, errorHandler };
