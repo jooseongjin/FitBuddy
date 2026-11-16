@@ -48,7 +48,7 @@ export type EquippedParts = {
   acc: PartLayer | null;
 };
 
-export type CharacterCanvasSize = 'home' | 'shop' | 'thumb';
+export type CharacterCanvasSize = 'home' | 'shop' | 'thumb' | 'fill';
 
 export type CharacterCanvasProps = {
   /** 캐릭터와 착용 레이어. 객체가 바뀔 때마다 다시 그리므로 호출부에서 useMemo 등으로 참조를 유지 */
@@ -63,6 +63,8 @@ const SIZE_CLASS: Record<CharacterCanvasSize, string> = {
   home: 'w-[100px] h-[100px]',
   shop: 'w-[280px] max-w-full h-auto aspect-square',
   thumb: 'h-full w-auto aspect-square',
+  // 부모 크기를 꽉 채움 (계정 아바타처럼 확대·잘라 보여줄 때)
+  fill: 'w-full h-full',
 };
 
 // 고해상도 화면에서도 선명하도록 표시 크기보다 크게 그림

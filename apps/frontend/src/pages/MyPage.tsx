@@ -5,16 +5,16 @@ import {
   ChevronRight,
   Flame,
   Gem,
-  Menu,
   Package,
   Palette,
   PawPrint,
   RefreshCw,
   Sparkles,
-  User,
   UserPen,
 } from 'lucide-react';
 import { BottomNav } from '../components/BottomNav';
+import { AccountMenu } from '../components/AccountMenu';
+import { CharacterAvatar } from '../components/CharacterAvatar';
 import { CharacterStage } from '../components/CharacterStage';
 import { FitPointChip } from '../components/FitPointChip';
 import { CATEGORY_ICON, ICON_SIZE } from '../components/categoryIcons';
@@ -166,17 +166,13 @@ export const MyPage: React.FC = () => {
       <div className="bg-white sticky top-0 z-10 shadow-sm">
         <div className="px-4 py-3 border-b border-gray-100 flex justify-between items-center">
           <div className="flex items-center gap-2">
-            <span className="w-9 h-9 flex items-center justify-center text-gray-700">
-              <Menu size={ICON_SIZE.nav} aria-hidden="true" />
-            </span>
             <div>
               <h1 className="text-base font-bold text-gray-800">마이페이지</h1>
               <FitPointChip amount={fitPoint} />
             </div>
           </div>
-          <span className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-gray-500">
-            <User size={ICON_SIZE.nav} aria-hidden="true" />
-          </span>
+          {/* 오른쪽 캐릭터 메뉴: 계정 정보·이용 가이드·로그아웃 (상점·마이페이지 같은 위치) */}
+          <AccountMenu />
         </div>
       </div>
 
@@ -198,9 +194,8 @@ export const MyPage: React.FC = () => {
 
         {/* 1. 프로필 - 닉네임, 캐릭터 레벨, 연속 달성 일수 */}
         <section className={`${CARD} p-4 flex items-center gap-3`} aria-label="프로필">
-          <span className="shrink-0 w-12 h-12 rounded-full bg-[#DDF3E8] text-[#2F8A5B] flex items-center justify-center">
-            <PawPrint size={22} aria-hidden="true" />
-          </span>
+          {/* 프로필 이미지: 헤더 캐릭터 메뉴와 같은 아바타 (실제 착용·배경, 메뉴는 헤더에서 열림) */}
+          <CharacterAvatar className="w-12 h-12" />
           <div className="min-w-0 flex-1 space-y-1.5">
             <h2 className="text-base font-bold text-gray-800 truncate">{nickname}</h2>
             <div className="flex flex-wrap items-center gap-1.5">

@@ -2,6 +2,7 @@ import React, { useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronRight, Footprints, Zap, Clock } from 'lucide-react';
 import { BottomNav } from '../components/BottomNav';
+import { AccountMenu } from '../components/AccountMenu';
 import { HeaderStatus } from '../components/progress/HeaderStatus';
 import { LevelBanner } from '../components/progress/LevelBanner';
 import { StreakCard } from '../components/progress/StreakCard';
@@ -42,6 +43,8 @@ export const Dashboard: React.FC = () => {
           <h1 className="text-base font-bold text-gray-800">{greetingName}, 오늘도 가볍게!</h1>
           <HeaderStatus />
         </div>
+        {/* 오른쪽 캐릭터 메뉴: 계정 정보·이용 가이드·로그아웃 (상점·마이페이지와 같은 위치) */}
+        <AccountMenu />
       </div>
 
       <div className="p-4 space-y-4">
