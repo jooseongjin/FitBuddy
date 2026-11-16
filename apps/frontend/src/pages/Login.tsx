@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { Eye, EyeOff, AlertCircle } from 'lucide-react';
 import api from '../api/axios';
 import { saveLoginUser } from '../lib/profileStorage';
+import { enterAccount } from '../lib/accountSession';
 
 export const Login: React.FC = () => {
-  const navigate = useNavigate();
   const [userId, setUserId] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -27,7 +27,9 @@ export const Login: React.FC = () => {
       // 로그인한 계정 정보(user_number, user_id, nickname)를 마이페이지 프로필에 그대로 사용
       // 로그인 응답에 이메일이 없어, 이메일로 로그인한 경우에만 입력한 이메일을 함께 저장
       saveLoginUser(res.data.user, userId.includes('@') ? { email: userId } : undefined);
-      navigate('/dashboard');
+      // 이전 사용자의 잔액·캐릭터 등이 남지 않도록 계정 전환 후 새로 불러와 이동
+      // 이전 사용자의 잔액·캐릭터 등이 남지 않도록 계정 전환 후 새로 불러와 이동
+      enterAccount('/dashboard');
     } catch (err: any) {
       if (err.response?.status === 401) {
         setErrorMsg('아이디 또는 비밀번호를 다시 확인해주세요.');

@@ -1,9 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Check, CircleAlert, CircleCheck, Eye, EyeOff, Gem, Info, Lock, Menu, Palette, Target, User } from 'lucide-react';
+import { Check, CircleAlert, CircleCheck, Eye, EyeOff, Gem, Info, Lock, Palette, Target } from 'lucide-react';
 import { CharacterCanvas, type CharacterRig, type EquippedParts } from '../components/CharacterCanvas';
 import { ItemThumb, type IconImage } from '../components/ItemThumb';
 import { BottomNav } from '../components/BottomNav';
+import { AccountMenu } from '../components/AccountMenu';
 import { CharacterStage } from '../components/CharacterStage';
 import { FitPointChip } from '../components/FitPointChip';
 import { CATEGORY_ICON, ICON_SIZE } from '../components/categoryIcons';
@@ -467,9 +468,6 @@ export const Shop: React.FC = () => {
       <div className="bg-white sticky top-0 z-10 shadow-sm">
         <div className="px-4 py-3 border-b border-gray-100 flex justify-between items-center">
           <div className="flex items-center gap-2">
-            <span className="w-9 h-9 flex items-center justify-center text-gray-700">
-              <Menu size={ICON_SIZE.nav} aria-hidden="true" />
-            </span>
             <div>
               <div className="flex items-center gap-1.5">
                 <span className="w-6 h-6 rounded-lg bg-[#DDF3E8] text-[#2F8A5B] flex items-center justify-center">
@@ -480,9 +478,8 @@ export const Shop: React.FC = () => {
               <FitPointChip amount={fitPoint} />
             </div>
           </div>
-          <span className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-gray-500">
-            <User size={ICON_SIZE.nav} aria-hidden="true" />
-          </span>
+          {/* 오른쪽 캐릭터 메뉴: 계정 정보·이용 가이드·로그아웃 (상점·마이페이지 같은 위치) */}
+          <AccountMenu />
         </div>
 
         {/* 미리 착용 / 구매 / 장착 액션 패널 */}

@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { AlertCircle } from 'lucide-react';
 import api from '../api/axios';
 import { saveLoginUser } from '../lib/profileStorage';
+import { enterAccount } from '../lib/accountSession';
 
 export const Signup: React.FC = () => {
-  const navigate = useNavigate();
   const [nickname, setNickname] = useState('');
   const [email, setEmail] = useState('');
   const [userId, setUserId] = useState('');
@@ -52,7 +52,8 @@ export const Signup: React.FC = () => {
       }
 
       alert('가입을 환영합니다! 맞춤 설문을 시작합니다.');
-      navigate('/onboarding/step1');
+      // 이전 사용자의 잔액·캐릭터 등이 남지 않도록 계정 전환 후 새로 불러와 이동
+      enterAccount('/onboarding/step1');
     } catch (err: any) {
       if (err.response?.status === 409) {
         setErrors({ server: '이미 사용 중인 아이디 또는 이메일입니다.' });
