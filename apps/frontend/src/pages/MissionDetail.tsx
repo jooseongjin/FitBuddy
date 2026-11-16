@@ -10,18 +10,21 @@ import { CharacterMotion } from '../components/progress/CharacterMotion';
 import { useProgress } from '../context/progressStore';
 import { useCharacterStore } from '../context/characterStore';
 import { useMissionStates } from '../hooks/useMissionStates';
-import { completeMission } from '../api/missionRewardApi';
+import { completeMission, incrementMissionProgress } from '../api/missionRewardApi';
+import { progressApi } from '../api/progressClient';
 import { ApiError, type MissionRewardResult } from '../api/progressTypes';
-import { findMission, progressLabel, progressPercent, remainingLabel } from '../data/missions';
+import { progressLabel, progressPercent, remainingLabel } from '../data/missions';
 import { EMPTY_EQUIPPED, findCharacter, getEquippedParts } from '../data/characterItems';
+import { useTodayMissions } from '../hooks/useTodayMissions';
 
 export const MissionDetail = () => {
   const navigate = useNavigate();
   const { id } = useParams();
-  const mission = findMission(id);
+  const { missions, loading: missionsLoading, error: missionsError } = useTodayMissions();
+  const mission = missions.find((item) => item.id === id) ?? null;
   const { applyMissionReward, releaseCelebration } = useProgress();
   const { currentCharacterId, equippedByCharacter } = useCharacterStore();
-  const states = useMissionStates();
+  const states = useMissionStates(missions);
   const state = mission ? states[mission.id] : null;
   const isCompleted = state?.status === 'done';
   // 목표 미달성(진행 중)이면 보상을 받을 수 없음
@@ -29,6 +32,7 @@ export const MissionDetail = () => {
   const current = state?.current ?? 0;
 
   const [submitting, setSubmitting] = useState(false);
+  const [recordingProgress, setRecordingProgress] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [reward, setReward] = useState<MissionRewardResult | null>(null);
   const [showModal, setShowModal] = useState(false);
@@ -51,7 +55,7 @@ export const MissionDetail = () => {
       if (reward) setShowModal(true);
       return;
     }
-    if (isInProgress) return;
+    if (isInProgress && progressApi.isMock) return;
     submittingRef.current = true;
     setSubmitting(true);
     setErrorMessage(null);
@@ -69,6 +73,19 @@ export const MissionDetail = () => {
     }
   };
 
+  const handleRecordRep = async () => {
+    if (!mission || recordingProgress || current >= mission.target) return;
+    setRecordingProgress(true);
+    setErrorMessage(null);
+    try {
+      await incrementMissionProgress(mission.id);
+    } catch (error) {
+      setErrorMessage(error instanceof ApiError ? error.message : '진행도를 기록하지 못했어요.');
+    } finally {
+      setRecordingProgress(false);
+    }
+  };
+
   const closeModalAndGo = (path: string) => {
     setShowModal(false);
     releaseCelebration();
@@ -76,9 +93,18 @@ export const MissionDetail = () => {
   };
 
   if (!mission) {
+    if (missionsLoading) {
+      return (
+        <div className="min-h-screen bg-gray-50 max-w-md mx-auto flex items-center justify-center p-6 text-sm text-gray-500">
+          오늘의 미션을 불러오는 중이에요.
+        </div>
+      );
+    }
     return (
       <div className="min-h-screen bg-gray-50 max-w-md mx-auto shadow-md flex flex-col items-center justify-center gap-3 p-6 text-center">
-        <p className="text-sm font-bold text-gray-700">미션을 찾을 수 없어요.</p>
+        <p role={missionsError ? 'alert' : undefined} className="text-sm font-bold text-gray-700">
+          {missionsError ?? '미션을 찾을 수 없어요.'}
+        </p>
         <button
           type="button"
           onClick={() => navigate('/missions')}
@@ -136,10 +162,23 @@ export const MissionDetail = () => {
                 ? `+${reward.earnedPoint} FP · +${reward.earnedXp} XP 획득 · 보상 지급 완료`
                 : '오늘 완료한 미션이에요 · 보상 지급 완료'
               : isInProgress
-                ? `목표까지 ${remainingLabel(mission, current)} 남았어요. 목표를 채우면 보상을 받을 수 있어요.`
+                ? progressApi.isMock
+                  ? `목표까지 ${remainingLabel(mission, current)} 남았어요. 목표를 채우면 보상을 받을 수 있어요.`
+                  : '운동을 마쳤다면 완료 기록을 남겨주세요.'
                 : '목표를 달성했어요! 보상을 받아보세요.'}
           </p>
         </div>
+
+        {mission.unit === '회' && !isCompleted && (
+          <button
+            type="button"
+            onClick={() => void handleRecordRep()}
+            disabled={recordingProgress || current >= mission.target}
+            className="w-full rounded-lg border border-emerald-200 bg-white px-4 py-3 text-sm font-semibold text-emerald-800 disabled:opacity-50"
+          >
+            {recordingProgress ? '기록 중…' : `운동 횟수 +1회 기록 (${current}/${mission.target})`}
+          </button>
+        )}
 
         {/* 가이드 안내 */}
         <div className="bg-white p-4 rounded-xl border border-gray-100 space-y-3">
@@ -160,7 +199,7 @@ export const MissionDetail = () => {
         <button
           type="button"
           onClick={() => void handleComplete()}
-          disabled={submitting || (isCompleted && !reward) || isInProgress}
+          disabled={submitting || (isCompleted && !reward) || (isInProgress && progressApi.isMock)}
           className={`w-full py-3.5 rounded-xl text-sm font-semibold transition inline-flex items-center justify-center gap-1.5 ${
             isCompleted
               ? reward
@@ -179,7 +218,7 @@ export const MissionDetail = () => {
           ) : isCompleted ? (
             reward ? '획득한 보상 확인' : '오늘 완료한 미션이에요'
           ) : isInProgress ? (
-            '목표를 채우면 보상을 받을 수 있어요'
+            progressApi.isMock ? '목표를 채우면 보상을 받을 수 있어요' : '운동 완료 기록'
           ) : errorMessage ? (
             '다시 시도'
           ) : (

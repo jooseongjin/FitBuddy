@@ -14,6 +14,7 @@ export type MissionItem = {
   /** 보상 기본 포인트 (mock 서버 적립에 사용, 실제는 서버 Missions.base_point) */
   basePoint: number;
   guide: string[];
+  serverStatus?: 'assigned' | 'completed';
 };
 
 export const TODAY_MISSIONS: MissionItem[] = [

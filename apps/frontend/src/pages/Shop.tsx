@@ -1,11 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Check, CircleAlert, CircleCheck, Eye, EyeOff, Gem, Info, Lock, Menu, Palette, Target, User } from 'lucide-react';
+import { Check, CircleAlert, CircleCheck, Eye, EyeOff, Gem, Info, Lock, Palette, Target } from 'lucide-react';
 import { CharacterCanvas, type CharacterRig, type EquippedParts } from '../components/CharacterCanvas';
 import { ItemThumb, type IconImage } from '../components/ItemThumb';
 import { BottomNav } from '../components/BottomNav';
 import { CharacterStage } from '../components/CharacterStage';
-import { FitPointChip } from '../components/FitPointChip';
 import { CATEGORY_ICON, ICON_SIZE } from '../components/categoryIcons';
 import {
   BACKGROUND_ITEMS,
@@ -19,6 +18,8 @@ import {
   type PartCategory,
 } from '../data/characterItems';
 import { useCharacterStore } from '../context/characterStore';
+import { progressApi } from '../api/progressClient';
+import { PageHeaderActions } from '../components/PageHeaderActions';
 
 type ShopTab = 'character' | PartCategory | 'bg';
 // 미리 착용은 파츠와 배경에만 적용 (캐릭터는 보유 캐릭터 교체만 지원)
@@ -237,7 +238,7 @@ export const Shop: React.FC = () => {
 
   const handlePurchase = (entry: ShopEntry) => {
     // 준비 중이거나 이미 보유한 항목은 구매 불가 (중복 구매 방지)
-    if (!entry.available || isOwned(entry)) return;
+    if (!progressApi.isMock || !entry.available || isOwned(entry)) return;
 
     // 구매 전 클라이언트에서 잔액 선검증 (FP만 차감 — XP·레벨은 바뀌지 않음)
     setEffectSeq((previous) => previous + 1);
@@ -311,9 +312,9 @@ export const Shop: React.FC = () => {
     if (!selectedEntry.available) return { label: '준비 중', disabled: true, run: NONE };
     if (!isOwned(selectedEntry)) {
       return {
-        label: 'FitPoint로 구매하기',
+        label: progressApi.isMock ? 'FitPoint로 구매하기' : '구매 준비 중',
         suffix: ` · ${selectedEntry.price.toLocaleString()} FP`,
-        disabled: feedback?.type === 'insufficient',
+        disabled: !progressApi.isMock || feedback?.type === 'insufficient',
         run: () => handlePurchase(selectedEntry),
       };
     }
@@ -465,25 +466,7 @@ export const Shop: React.FC = () => {
     <div className="min-h-screen bg-[#F8F5EC] pb-24 max-w-md mx-auto shadow-md">
       {/* 상단 헤더 - 보유 FitPoint 실시간 노출 */}
       <div className="bg-white sticky top-0 z-10 shadow-sm">
-        <div className="px-4 py-3 border-b border-gray-100 flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <span className="w-9 h-9 flex items-center justify-center text-gray-700">
-              <Menu size={ICON_SIZE.nav} aria-hidden="true" />
-            </span>
-            <div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-6 h-6 rounded-lg bg-[#DDF3E8] text-[#2F8A5B] flex items-center justify-center">
-                  <Palette size={ICON_SIZE.inline} aria-hidden="true" />
-                </span>
-                <h1 className="text-base font-bold text-gray-800">꾸미기 상점</h1>
-              </div>
-              <FitPointChip amount={fitPoint} />
-            </div>
-          </div>
-          <span className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-gray-500">
-            <User size={ICON_SIZE.nav} aria-hidden="true" />
-          </span>
-        </div>
+        <PageHeaderActions title="꾸미기 상점" amount={fitPoint} TitleIcon={Palette} />
 
         {/* 미리 착용 / 구매 / 장착 액션 패널 */}
         <div className="px-4 py-2.5">

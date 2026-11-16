@@ -64,6 +64,7 @@ type MockState = {
 const NO_MISSIONS: readonly string[] = [];
 const NO_PROGRESS: Readonly<Record<string, number>> = {};
 const STORAGE_KEY = 'fb.mock.progress.v1';
+const storageKeyFor = (accountKey: string | null) => accountKey ? `${STORAGE_KEY}.${accountKey}` : STORAGE_KEY;
 
 /** 시나리오별 오늘 완료한 미션 (오늘 완료 시나리오면 기존 화면처럼 '아침 스트레칭' 완료) */
 const scenarioMissionLog = (scenario: StreakScenario, today: DateKey): MockState['missionLog'] =>
@@ -184,6 +185,20 @@ const initialState = (): MockState => {
   };
 };
 
+const firstUserState = (): MockState => {
+  const today = kstDateKey(new Date());
+  return {
+    ...initialState(),
+    totalXp: 0,
+    level: 1,
+    balance: 0,
+    ledger: [],
+    record: scenarioRecord('fresh', today, 'basic'),
+    missionLog: {},
+    missionProgress: { [today]: Object.fromEntries(TODAY_MISSIONS.map((mission) => [mission.id, 0])) },
+  };
+};
+
 /** 초기 잔액 (/dev/ui "기본" 버튼, 테스트에서 사용) */
 export const MOCK_INITIAL_BALANCE = sumLedger(seedLedger(kstDateKey(new Date())));
 
@@ -206,9 +221,9 @@ try {
   // 무시
 }
 
-const loadSaved = (): Saved | null => {
+const loadSaved = (accountKey: string | null): Saved | null => {
   try {
-    const raw = storage()?.getItem(STORAGE_KEY);
+    const raw = storage()?.getItem(storageKeyFor(accountKey));
     if (!raw) return null;
     const saved = JSON.parse(raw) as Saved;
     // 형식이 다르면(이전 버전 저장값) 버리고 초기값 사용
@@ -224,16 +239,37 @@ const loadSaved = (): Saved | null => {
 class MockProgressServer implements ProgressApi {
   readonly isMock = true;
 
+  private accountKey: string | null;
   private state: MockState;
   private idempotency: Map<string, { body: string; result: RepairResult }>;
   private listeners = new Set<() => void>();
 
   constructor() {
-    const saved = loadSaved();
-    this.state = saved?.state ?? initialState();
+    this.accountKey = this.authenticatedAccountKey();
+    const saved = loadSaved(this.accountKey);
+    this.state = saved?.state ?? (this.accountKey ? firstUserState() : initialState());
     // 시연 중 실수로 남은 실패 모드는 새로고침하면 해제
     this.state = { ...this.state, failMode: 'none' };
     this.idempotency = new Map(saved?.idempotency ?? []);
+  }
+
+  get activeAccountKey(): string | null {
+    return this.accountKey;
+  }
+
+  /** Switch mock state to the signed-in account; new accounts start with no demo progress. */
+  setAccount(accountKey: number | string | null) {
+    const nextKey = accountKey === null ? null : String(accountKey);
+    if (nextKey === this.accountKey) return;
+
+    this.persist();
+    this.accountKey = nextKey;
+    const saved = loadSaved(nextKey);
+    this.state = saved?.state ?? (nextKey ? firstUserState() : initialState());
+    this.state = { ...this.state, failMode: 'none' };
+    this.idempotency = new Map(saved?.idempotency ?? []);
+    this.persist();
+    this.emit();
   }
 
   // ---------- 시간 ----------
@@ -545,7 +581,7 @@ class MockProgressServer implements ProgressApi {
   private persist() {
     try {
       const saved: Saved = { state: this.state, idempotency: [...this.idempotency.entries()].slice(-20) };
-      storage()?.setItem(STORAGE_KEY, JSON.stringify(saved));
+      storage()?.setItem(storageKeyFor(this.accountKey), JSON.stringify(saved));
     } catch {
       // 저장소 사용 불가: 메모리 값만 유지
     }
@@ -553,6 +589,16 @@ class MockProgressServer implements ProgressApi {
 
   private emit() {
     this.listeners.forEach((listener) => listener());
+  }
+
+  private authenticatedAccountKey(): string | null {
+    try {
+      if (typeof window === 'undefined' || !window.localStorage.getItem('token')) return null;
+      const session = JSON.parse(window.localStorage.getItem('fb.session.user') ?? 'null') as { user_number?: unknown } | null;
+      return typeof session?.user_number === 'number' && session.user_number > 0 ? String(session.user_number) : null;
+    } catch {
+      return null;
+    }
   }
 }
 

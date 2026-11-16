@@ -8,6 +8,7 @@ import { progressApi } from './progressClient';
 import { ApiError, type MissionRewardResult } from './progressTypes';
 import { mockProgressServer } from '../mocks/mockProgressServer';
 import { toApiError } from './httpProgressApi';
+import { TODAY_MISSIONS } from '../data/missions';
 
 type Raw = Record<string, unknown>;
 const num = (value: unknown, fallback = 0) => (typeof value === 'number' ? value : fallback);
@@ -48,6 +49,25 @@ export const completeMission = async (missionId: string, basePoint?: number, tit
       throw new ApiError('MISSION_ALREADY_COMPLETED', body?.error?.message ?? body?.message ?? '이미 완료한 미션이에요.');
     }
     // 백엔드 오류 형식 { success:false, code, message } 와 설계서 형식을 함께 처리
+    throw toApiError(error);
+  }
+};
+
+export const incrementMissionProgress = async (missionId: string, increment = 1): Promise<number> => {
+  if (progressApi.isMock) {
+    const target = TODAY_MISSIONS.find((mission) => mission.id === missionId)?.target ?? Number.MAX_SAFE_INTEGER;
+    const next = Math.min(
+      target,
+      mockProgressServer.missionCurrent(missionId) + increment,
+    );
+    mockProgressServer.devSetMissionProgress(missionId, next);
+    return next;
+  }
+  try {
+    const { data } = await api.post<{ data: { current_value: number } }>(`/missions/${missionId}/progress`, { increment });
+    if (typeof window !== 'undefined') window.dispatchEvent(new Event('fitbuddy:health-synced'));
+    return data.data.current_value;
+  } catch (error) {
     throw toApiError(error);
   }
 };

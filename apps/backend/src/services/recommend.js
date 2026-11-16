@@ -33,7 +33,8 @@ async function getTodayMissions(userNumber, date = todayKST()) {
   await pool.query('CALL sp_assign_daily_missions(?, ?)', [userNumber, date]);
 
   const [rows] = await pool.query(
-    `SELECT um.user_mission_id, m.Missions_id AS mission_id, m.title, m.description, m.exercise_type,
+        `SELECT um.user_mission_id, um.progress_value AS current_value,
+          m.Missions_id AS mission_id, m.title, m.description, m.exercise_type,
             m.environment, m.target_value, m.target_unit, m.difficulty, m.base_point,
             um.mission_status, um.completed_at
        FROM User_missions um

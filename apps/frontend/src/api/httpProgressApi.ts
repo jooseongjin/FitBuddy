@@ -88,12 +88,13 @@ export const httpProgressApi: ProgressApi = {
   async getCharacterProgress(): Promise<CharacterProgress> {
     try {
       const { data } = await api.get<Raw>('/character');
+      const body = unwrap(data);
       return {
-        level: num(data.level, 1),
-        totalEarnedXp: num(data.total_earned_xp),
-        currentLevelXp: numOrNull(data.current_level_xp),
-        nextLevelXp: numOrNull(data.next_level_xp),
-        isMaxLevel: Boolean(data.is_max_level),
+        level: num(body.level, 1),
+        totalEarnedXp: num(body.total_earned_xp),
+        currentLevelXp: numOrNull(body.current_level_xp),
+        nextLevelXp: numOrNull(body.next_level_xp),
+        isMaxLevel: Boolean(body.is_max_level),
       };
     } catch (error) {
       throw toApiError(error);
@@ -103,7 +104,7 @@ export const httpProgressApi: ProgressApi = {
   async getStreak(): Promise<StreakState> {
     try {
       const { data } = await api.get<Raw>('/streak');
-      return mapStreak(data);
+      return mapStreak(unwrap(data));
     } catch (error) {
       throw toApiError(error);
     }

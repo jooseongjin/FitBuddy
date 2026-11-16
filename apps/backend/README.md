@@ -11,7 +11,7 @@ npm start                   # http://localhost:4000
 npm test                    # 통합 테스트 (migrate:reset 후 실행)
 ```
 - `npm run migrate` 는 DB가 이미 있으면 중단합니다. `migrate:reset` 은 **기존 데이터를 모두 삭제**합니다.
-- `db/` 의 SQL 파일은 번호 순서(001 → 006)대로 실행됩니다.
+- `db/` 의 SQL 파일은 번호 순서(001 → 009)대로 실행됩니다.
 - 이미 운영 중인 DB(배포 서버 등)에 새 파일만 적용할 때: `npm run migrate -- --from 005`
   (기존 데이터 유지, 005 이상 번호만 실행. 005·006은 여러 번 실행해도 중복되지 않음)
 
@@ -27,9 +27,26 @@ npm test                    # 통합 테스트 (migrate:reset 후 실행)
 | POST | /onboarding | Bearer | API-03 최초 저장 201 / 409 이미 있음 |
 | PUT | /onboarding | Bearer | 수정 200 / 404 |
 | GET | /onboarding | Bearer | 조회 |
-| GET | /missions/recommended | Bearer | API-04 (박상욱 담당, 별도 PR) |
-| POST | /missions/:id/complete | Bearer | API-05 (박상욱 담당, 별도 PR) |
-| GET | /points/balance | Bearer | API-06 (박상욱 담당, 별도 PR) |
+| GET | /missions/recommended | Bearer | 오늘의 맞춤 미션 조회/배정 |
+| POST | /missions/:id/complete | Bearer | 미션 완료, FitPoint·XP·Streak 원자적 갱신 |
+| GET | /character | Bearer | DB 캐릭터 레벨·누적 XP 조회 |
+| GET | /streak | Bearer | DB 연속 기록·주간 기록 조회 |
+| POST | /streak/repair | Bearer | 어제 기록 복구 및 포인트 원장 차감 |
+| GET | /points/balance | Bearer | 원장 합계 잔액 조회 |
+| GET | /points/history | Bearer | 원장 내역 페이지 조회 |
+| GET | /health/today | Bearer | 오늘 건강 요약 조회 |
+| PUT | /health/today | Bearer | HealthKit/Health Connect 일일 요약 동기화 |
+| POST | /missions/:id/progress | Bearer | 반복 횟수 미션 수동 진행 기록 |
+
+진행 정보와 미션은 모두 요청 사용자 소유 행으로 제한됩니다. 포인트 잔액은 `Point_transactions` 합계이며, 미션 완료와 복구는 InnoDB 트랜잭션으로 처리합니다.
+
+Streak 복구 기본값은 개발용 임시 정책입니다. `.env`에서 `STREAK_REPAIR_COST` (기본 300), `STREAK_REPAIR_MONTHLY_LIMIT_BASIC` (기본 1), `STREAK_REPAIR_MONTHLY_LIMIT_PREMIUM` (기본 3), `STREAK_REPAIR_PREMIUM_FREE` (기본 1)로 조정할 수 있습니다. 제품 정책 확정 후 값을 변경해야 합니다.
+
+레벨 임계치가 아직 확정되지 않아 미션 완료 시 누적 XP만 DB에 쌓고 `Characters.level`은 유지합니다. API는 XP 임계치 필드를 `null`로 반환합니다.
+
+건강 연동은 `Health_daily_summaries`에 오늘 걸음 수·활동 칼로리·운동시간 합계만 저장합니다. HealthKit/Health Connect의 읽기 권한만 요청하며, `걸음`과 `분` 미션은 동기화된 요약값으로 진행도를 계산합니다. 표준 건강 데이터에 반복 횟수는 없으므로 `회` 미션은 인증된 사용자가 앱에서 직접 기록합니다. 이 건강 수치는 클라이언트 네이티브 앱에서 제공되므로 보안상 서버가 원본 건강 플랫폼과 직접 검증하는 구조는 아닙니다.
+
+실제 휴대전화에서 사용할 때는 프론트 `.env.production`의 `VITE_API_URL`을 휴대전화에서 접근 가능한 HTTPS 백엔드 주소로 설정하고 백엔드 `CORS_ORIGIN`에 앱 origin을 허용해야 합니다. 로컬 USB 디버깅은 기기에서 PC의 LAN 주소를 사용하세요. Android WebView의 `localhost`는 PC가 아니라 휴대전화 자신을 가리킵니다.
 
 ### signup 요청 (Signup.tsx 와 동일)
 `{ "user_id": "아이디(최대 30자)", "email": "...", "password": "8자 이상", "nickname": "최대 16자" }`
@@ -48,8 +65,10 @@ npm test                    # 통합 테스트 (migrate:reset 후 실행)
 `exercise_place=outdoor` 이면 `avoid_motion` 은 서버가 빈 값으로 저장합니다.
 
 ## 공용 테스트 계정
-`db/004_test_account.sql` 이 마이그레이션 때 자동 생성합니다 (로컬 개발·시연 전용).
-- 아이디 `testuser01` / 비밀번호 `Test1234!` (온보딩 완료 상태라 로그인 후 바로 추천 미션 조회 가능)
+`db/004_test_account.sql` 과 `db/007_test_account_progress.sql` 이 로컬 개발·시연 전용 계정과 진행 기록을 생성합니다.
+- 아이디 `testuser01` / 비밀번호 `Test1234!`
+- 온보딩 완료, 최근 6일 완료 기록, 6일 연속 Streak, 미션 완료 원장 기준 약 200 FitPoint
+- 실제 배포 DB에는 테스트 계정과 시연용 기록을 적용하지 마세요.
 
 ## 서버 주소 / CORS
 - 포트 기본값 **4000** (프론트 `apps/frontend/src/api/axios.ts` 의 baseURL)

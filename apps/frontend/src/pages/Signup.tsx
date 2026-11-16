@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { AlertCircle } from 'lucide-react';
 import api from '../api/axios';
 import { saveLoginUser } from '../lib/profileStorage';
+import { mockProgressServer } from '../mocks/mockProgressServer';
 
 export const Signup: React.FC = () => {
   const navigate = useNavigate();
@@ -47,6 +48,7 @@ export const Signup: React.FC = () => {
         const login = await api.post('/auth/login', { user_id: userId, password });
         localStorage.setItem('token', login.data.token);
         saveLoginUser(login.data.user, { email });
+        mockProgressServer.setAccount(login.data.user.user_number);
       } catch {
         // 무시
       }
