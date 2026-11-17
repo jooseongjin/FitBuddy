@@ -4,13 +4,13 @@ FitBuddy API는 기본적으로 `http://localhost:4000/api/v1`의 실제 백엔�
 
 ## 모바일 건강 데이터
 
-`npm run cap:sync`로 웹 빌드와 네이티브 프로젝트를 동기화합니다. Android 빌드는 Android Studio/SDK가 필요하고, iOS 빌드와 HealthKit entitlement 서명은 macOS의 Xcode가 필요합니다.
+이번 PR은 Android/Health Connect를 우선 지원합니다. `npm run cap:sync`로 웹 빌드와 Android 네이티브 프로젝트만 동기화합니다. Android 빌드에는 Android Studio/SDK가 필요합니다.
 
-- iPhone: Apple 건강 앱의 걸음·활동 에너지·운동 세션 읽기를 허용합니다. iOS 빌드에는 HealthKit capability가 있는 Apple signing 설정이 필요합니다.
+- iPhone/HealthKit 네이티브 프로젝트와 실기기 연동은 후속 작업입니다. 공용 건강 데이터 API는 iOS를 다시 연결할 수 있도록 유지합니다.
 - Samsung/Android: Health Connect 권한을 허용합니다. Samsung Health 앱의 설정 > 건강 데이터 권한에서 Health Connect 데이터 공유를 켜야 하며, Health Connect가 없는 Android 13 이하 기기는 Play Store에서 설치해야 합니다.
 - 일반 브라우저에서는 건강 앱 API를 사용할 수 없습니다. 대시보드는 연결 전 실제 저장값(0)을 표시하고 임의의 샘플 값을 만들지 않습니다.
 
-실제 기기 빌드는 백엔드 API를 휴대전화에서 접근 가능한 주소로 설정한 다음 `npm run cap:sync`를 실행합니다. Android Studio는 `npm run cap:android`, macOS/Xcode는 `npm run cap:ios`로 엽니다. 로컬 USB 디버깅에서는 `.env.production`의 `VITE_API_URL`을 PC LAN IP로 지정하고 백엔드 `CORS_ORIGIN`에도 Capacitor origin을 포함해야 합니다.
+실제 기기 빌드는 백엔드 API를 휴대전화에서 접근 가능한 주소로 설정한 다음 `npm run cap:sync`를 실행합니다. Android Studio는 `npm run cap:android`로 엽니다. 로컬 USB 디버깅에서는 `.env.production`의 `VITE_API_URL`을 PC LAN IP로 지정하고 백엔드 `CORS_ORIGIN`에도 Capacitor origin을 포함해야 합니다.
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
