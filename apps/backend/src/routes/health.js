@@ -32,7 +32,7 @@ const syncSchema = z.object({
   active_calories: z.number().int().min(0).max(20000),
   exercise_minutes: z.number().int().min(0).max(1440),
   source: z.enum(['healthkit', 'health_connect']),
-  records: z.array(recordSchema).max(5000).default([]),
+  records: z.array(recordSchema).max(1000).default([]),
 });
 
 const trustedSourceIds = new Set(
@@ -81,21 +81,24 @@ router.put('/today', auth, async (req, res, next) => {
       [req.user.user_number, summary.source],
     );
 
-    for (const record of summary.records) {
+    const records = summary.records.map((record) => {
       const sourceApp = record.source_app ?? null;
       const recordingMethod = sourceApp && trustedSourceIds.has(sourceApp)
         ? (record.record_type === 'exercise' ? 'active' : 'automatic')
         : 'unknown';
       const startAt = new Date(new Date(record.start_at).getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
       const endAt = new Date(new Date(record.end_at).getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+      return [req.user.user_number, summary.source, record.external_id, record.record_type,
+        record.exercise_type ?? null, record.value, record.unit, startAt, endAt,
+        sourceApp, record.device_type, recordingMethod];
+    });
+    if (records.length) {
       await connection.query(
         `INSERT IGNORE INTO Activity_records
            (Users_user_number, platform, external_id, record_type, exercise_type, value, unit,
             start_at, end_at, source_app, device_type, recording_method)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [req.user.user_number, summary.source, record.external_id, record.record_type,
-          record.exercise_type ?? null, record.value, record.unit, startAt, endAt,
-          sourceApp, record.device_type, recordingMethod],
+         VALUES ?`,
+        [records],
       );
     }
 

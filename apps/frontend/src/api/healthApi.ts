@@ -56,16 +56,16 @@ const syncNativeHealth = async (requestPermissions: boolean): Promise<HealthMetr
       ? Health.queryAggregated({ ...range, dataType: 'steps', bucket: 'day', aggregation: 'sum' }).catch(() => ({ samples: [] }))
       : Promise.resolve({ samples: [] }),
     canRead('steps')
-      ? Health.readSamples({ ...range, dataType: 'steps', limit: 5000 }).catch(() => ({ samples: [] }))
+      ? Health.readSamples({ ...range, dataType: 'steps', limit: 1000 }).catch(() => ({ samples: [] }))
       : Promise.resolve({ samples: [] }),
     canRead('calories')
       ? Health.queryAggregated({ ...range, dataType: 'calories', bucket: 'day', aggregation: 'sum' }).catch(() => ({ samples: [] }))
       : Promise.resolve({ samples: [] }),
     canRead('calories')
-      ? Health.readSamples({ ...range, dataType: 'calories', limit: 5000 }).catch(() => ({ samples: [] }))
+      ? Health.readSamples({ ...range, dataType: 'calories', limit: 1000 }).catch(() => ({ samples: [] }))
       : Promise.resolve({ samples: [] }),
     canRead('workouts')
-      ? Health.queryWorkouts({ ...range, limit: 500 }).catch(() => ({ workouts: [] }))
+      ? Health.queryWorkouts({ ...range, limit: 100 }).catch(() => ({ workouts: [] }))
       : Promise.resolve({ workouts: [] }),
   ]);
 
@@ -85,7 +85,7 @@ const syncNativeHealth = async (requestPermissions: boolean): Promise<HealthMetr
       unit: 'count' as const,
       start_at: sample.startDate,
       end_at: sample.endDate,
-      source_app: sample.sourceId ?? null,
+      source_app: sample.sourceId ?? sample.sourceName ?? null,
       device_type: deviceType(sample.deviceType),
     }] : []),
     ...calorieSamples.samples.flatMap((sample) => sample.platformId ? [{
@@ -106,7 +106,7 @@ const syncNativeHealth = async (requestPermissions: boolean): Promise<HealthMetr
       unit: 'min' as const,
       start_at: workout.startDate,
       end_at: workout.endDate,
-      source_app: workout.sourceId ?? null,
+      source_app: workout.sourceId ?? workout.sourceName ?? null,
       device_type: 'unknown' as const,
     }] : []),
   ];

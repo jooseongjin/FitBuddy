@@ -11,7 +11,7 @@ npm start                   # http://localhost:4000
 npm test                    # 통합 테스트 (migrate:reset 후 실행)
 ```
 - `npm run migrate` 는 DB가 이미 있으면 중단합니다. `migrate:reset` 은 **기존 데이터를 모두 삭제**합니다.
-- `db/` 의 배포 마이그레이션은 001 → 009 순서로 적용합니다. `008_health_daily_metrics.sql`은 컬럼을 추가하므로 한 번만 실행하세요.
+- `db/` 의 배포 마이그레이션은 001 → 009 순서로 적용합니다. migration runner는 `008_health_daily_metrics.sql`의 컬럼이 이미 있으면 자동으로 건너뜁니다. SQL 파일을 직접 실행하는 경우에는 한 번만 적용해야 합니다.
 - 이미 운영 중인 DB(배포 서버 등)에 새 파일만 적용할 때: `npm run migrate -- --from 005`
   (기존 데이터 유지, 005 이상 번호만 실행. 적용한 번호를 기록해 중복 실행하지 마세요.)
 
@@ -47,9 +47,9 @@ Streak 복구 기본값은 개발용 임시 정책입니다. `.env`에서 `STREA
 
 `db/007_health_activity.sql`의 `Health_connections`, `Activity_records`, `Daily_activity`, `Mission_verify_rules`, `Mission_verifications`를 사용합니다. 건강 동기화는 stable `external_id`를 원본 기록에 저장해 재전송·계정 간 재사용을 막고, 미션 완료는 `Mission_verify_rules`를 확인해 인증 결과를 기록합니다. 인증 규칙이 있는 걸음/운동시간 미션은 `verified` 보상 배율 1.00, 직접 기록하는 횟수 미션은 `unverified` 0.50 배율로 원장에 남깁니다.
 
-센서 출처는 `HEALTH_TRUSTED_SOURCE_IDS` 환경변수(쉼표 구분, 기본값은 Samsung Health 및 Android Health Connect 패키지) allowlist를 이용해 분류합니다. 다만 `source_app`과 원본 payload 자체는 클라이언트가 전송하므로, allowlist는 완전한 위변조 방지/플랫폼 서명이 아닙니다. 실제 포인트가 운영되는 배포 전에 플랫폼 증명 또는 추가 이상 탐지와 실제 Health Connect 기록 검증을 진행하세요. 수동 반복 API는 요청당 +1만 허용하지만 여러 번 호출할 수 있으므로 인증된 운동 횟수 증명은 별도 후속 과제입니다.
+센서 출처는 `HEALTH_TRUSTED_SOURCE_IDS` 환경변수(쉼표 구분, 기본값은 Samsung Health 및 Android Health Connect 패키지) allowlist를 이용해 분류합니다. 다만 `source_app`과 원본 payload 자체는 클라이언트가 전송하므로 allowlist는 완전한 위변조 방지나 플랫폼 서명이 아닙니다. 실제 포인트가 운영되는 배포 전에 서버 검증/이상 탐지와 Health Connect 기록 재검증을 추가하세요. 수동 반복 API는 요청당 +1로 제한하지만 반복 호출은 가능하므로 인증된 운동 횟수 증명도 후속 과제입니다.
 
-실제 휴대전화에서 사용할 때는 프론트 `.env.production`의 `VITE_API_URL`을 휴대전화에서 접근 가능한 HTTPS 백엔드 주소로 설정하고 백엔드 `CORS_ORIGIN`에 앱 origin을 허용해야 합니다. 로컬 USB 디버깅은 기기에서 PC의 LAN 주소를 사용하세요. Android WebView의 `localhost`는 PC가 아니라 휴대전화 자신을 가리킵니다.
+Railway 배포에서는 서비스 Root Directory를 `apps/backend`로 지정하고 `npm start`를 실행 명령으로 사용합니다. `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `JWT_SECRET`은 Railway Variables에 설정하고 `/health`를 health check path로 사용하세요. migration은 백업과 schema 확인 후 한 번 실행하고, 운영 DB에 테스트용 seed SQL은 실행하지 마세요. 프론트 `.env.production`의 `VITE_API_URL`은 휴대전화에서 접근 가능한 HTTPS API 주소여야 하며 Android WebView의 `localhost`는 PC가 아니라 휴대전화 자신을 가리킵니다.
 
 ### signup 요청 (Signup.tsx 와 동일)
 `{ "user_id": "아이디(최대 30자)", "email": "...", "password": "8자 이상", "nickname": "최대 16자" }`
