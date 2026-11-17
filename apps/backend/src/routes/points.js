@@ -14,6 +14,17 @@ router.get('/balance', auth, async (req, res, next) => {
   }
 });
 
+router.get('/', auth, async (req, res, next) => {
+  try {
+    res.json({
+      success: true,
+      data: { user_number: req.user.user_number, balance: await getBalance(req.user.user_number) },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get('/history', auth, async (req, res, next) => {
   try {
     const page = Number(req.query.page ?? 1);

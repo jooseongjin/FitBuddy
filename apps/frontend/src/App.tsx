@@ -13,6 +13,7 @@ import { Shop } from './pages/Shop';
 import { MyPage } from './pages/MyPage';
 import { PointHistory } from './pages/PointHistory';
 import { ProfileEdit } from './pages/ProfileEdit';
+import { PasswordChange } from './pages/PasswordChange';
 import { WorkoutReminder } from './components/WorkoutReminder';
 import { CharacterStoreProvider } from './context/CharacterStoreProvider';
 import { ProgressStoreProvider } from './context/ProgressStoreProvider';
@@ -40,6 +41,7 @@ function App() {
           <Route path="/shop" element={<Shop />} />
           <Route path="/mypage" element={<MyPage />} />
           <Route path="/mypage/profile" element={<ProfileEdit />} />
+          <Route path="/mypage/password" element={<PasswordChange />} />
           <Route path="/points" element={<PointHistory />} />
           {DevUiPreview && (
             <Route

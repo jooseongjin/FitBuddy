@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, CalendarDays, ChevronRight, CircleAlert, Info, KeyRound, Lock, Mail, PawPrint, UserRound } from 'lucide-react';
+import { ArrowLeft, CalendarDays, ChevronRight, CircleAlert, Info, KeyRound, Lock, Mail, UserRound } from 'lucide-react';
 import { MockTag } from '../components/progress/MockTag';
+import { CharacterAvatar } from '../components/CharacterAvatar';
 import {
   GOAL_OPTIONS,
   NICKNAME_MAX,
@@ -146,9 +147,8 @@ export const ProfileEdit: React.FC = () => {
       <form onSubmit={handleSave} className="p-4 space-y-4" noValidate>
         {/* 로그인한 계정 요약 */}
         <section className={`${CARD} p-4 flex items-center gap-3`} aria-label="내 계정">
-          <span className="shrink-0 w-14 h-14 rounded-full bg-[#DDF3E8] text-[#2F8A5B] flex items-center justify-center">
-            <PawPrint size={26} aria-hidden="true" />
-          </span>
+          {/* 프로필 사진: 헤더·마이페이지와 같은 캐릭터 아바타 (실제 착용 아이템·적용 배경) */}
+          <CharacterAvatar className="w-14 h-14" />
           <div className="min-w-0">
             <p className="text-base font-bold text-gray-800 truncate">{displayName(form.nickname)}</p>
             <p className="text-xs text-gray-500 truncate">@{initial.userId}</p>
@@ -230,20 +230,16 @@ export const ProfileEdit: React.FC = () => {
         {/* 보안 */}
         <section className="space-y-2" aria-label="보안">
           <h2 className="px-1 text-sm font-bold text-gray-800">보안</h2>
-          {/* TODO: 비밀번호 변경 API가 없어 비활성 (현재 비밀번호 확인 → 새 비밀번호 저장은 서버에서 처리해야 함) */}
           <button
             type="button"
-            disabled
-            className={`${CARD} w-full px-4 py-3.5 flex items-center justify-between gap-3 text-left cursor-not-allowed`}
+            onClick={() => navigate('/mypage/password')}
+            className={`${CARD} w-full px-4 py-3.5 flex items-center justify-between gap-3 text-left cursor-pointer hover:bg-gray-50`}
           >
-            <span className="flex items-center gap-2 text-sm font-bold text-gray-400">
-              <KeyRound size={16} aria-hidden="true" />
+            <span className="flex items-center gap-2 text-sm font-bold text-gray-800">
+              <KeyRound size={16} className="text-[#2F8A5B]" aria-hidden="true" />
               비밀번호 변경
             </span>
-            <span className="flex items-center gap-0.5 text-[11px] font-bold text-gray-400">
-              준비 중
-              <ChevronRight size={14} aria-hidden="true" />
-            </span>
+            <ChevronRight size={16} className="text-gray-400" aria-hidden="true" />
           </button>
         </section>
 

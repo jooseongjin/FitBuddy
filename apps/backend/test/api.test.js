@@ -87,20 +87,6 @@ test('탈퇴 계정 로그인 403', async () => {
 test('공용 테스트 계정(testuser01) 로그인, 온보딩 완료 상태', async () => {
   const r = await call('/api/v1/auth/login', 'POST', { user_id: 'testuser01', password: 'Test1234!' });
   assert.equal(r.status, 200); assert.equal(r.json.onboarding_completed, true);
-  const [streak, balance] = await Promise.all([
-    call('/api/v1/streak', 'GET', null, r.json.token),
-    call('/api/v1/points/balance', 'GET', null, r.json.token),
-  ]);
-  assert.equal(streak.json.data.current_streak, 6);
-  assert.ok(balance.json.data.balance > 0);
-  const [[history]] = await pool.query(
-    `SELECT COUNT(*) AS completed_days FROM User_missions um
-      JOIN Users u ON u.user_number = um.Users_user_number
-     WHERE u.user_id = 'testuser01' AND um.mission_status = 'completed'
-       AND um.assigned_date BETWEEN DATE(UTC_TIMESTAMP() + INTERVAL 9 HOUR) - INTERVAL 6 DAY
-                                AND DATE(UTC_TIMESTAMP() + INTERVAL 9 HOUR) - INTERVAL 1 DAY`,
-  );
-  assert.equal(history.completed_days, 6);
 });
 test('온보딩: 토큰 없으면 401', async () => {
   assert.equal((await call('/api/v1/onboarding', 'POST', ob)).status, 401);

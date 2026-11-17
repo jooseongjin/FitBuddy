@@ -11,9 +11,9 @@ npm start                   # http://localhost:4000
 npm test                    # 통합 테스트 (migrate:reset 후 실행)
 ```
 - `npm run migrate` 는 DB가 이미 있으면 중단합니다. `migrate:reset` 은 **기존 데이터를 모두 삭제**합니다.
-- `db/` 의 SQL 파일은 번호 순서(001 → 009)대로 실행됩니다.
+- `db/` 의 배포 마이그레이션은 001 → 009 순서로 적용합니다. `008_health_daily_metrics.sql`은 컬럼을 추가하므로 한 번만 실행하세요.
 - 이미 운영 중인 DB(배포 서버 등)에 새 파일만 적용할 때: `npm run migrate -- --from 005`
-  (기존 데이터 유지, 005 이상 번호만 실행. 005·006은 여러 번 실행해도 중복되지 않음)
+  (기존 데이터 유지, 005 이상 번호만 실행. 적용한 번호를 기록해 중복 실행하지 마세요.)
 
 ## API (모두 `/api/v1`)
 요청·응답 필드명은 **snake_case** (TRD, 프론트와 동일). 모든 응답에 `success` 가 있습니다.
@@ -27,8 +27,10 @@ npm test                    # 통합 테스트 (migrate:reset 후 실행)
 | POST | /onboarding | Bearer | API-03 최초 저장 201 / 409 이미 있음 |
 | PUT | /onboarding | Bearer | 수정 200 / 404 |
 | GET | /onboarding | Bearer | 조회 |
-| GET | /missions/recommended | Bearer | 오늘의 맞춤 미션 조회/배정 |
+| GET | /missions/recommended, /missions/today | Bearer | 오늘의 맞춤 미션 조회/배정 |
+| POST | /missions/:id/progress | Bearer | 반복 횟수 미션 수동 진행 기록 |
 | POST | /missions/:id/complete | Bearer | 미션 완료, FitPoint·XP·Streak 원자적 갱신 |
+| POST | /missions/today/:missionId/complete | Bearer | 기존 클라이언트 호환 완료 경로 |
 | GET | /character | Bearer | DB 캐릭터 레벨·누적 XP 조회 |
 | GET | /streak | Bearer | DB 연속 기록·주간 기록 조회 |
 | POST | /streak/repair | Bearer | 어제 기록 복구 및 포인트 원장 차감 |
@@ -36,7 +38,6 @@ npm test                    # 통합 테스트 (migrate:reset 후 실행)
 | GET | /points/history | Bearer | 원장 내역 페이지 조회 |
 | GET | /health/today | Bearer | 오늘 건강 요약 조회 |
 | PUT | /health/today | Bearer | HealthKit/Health Connect 일일 요약 동기화 |
-| POST | /missions/:id/progress | Bearer | 반복 횟수 미션 수동 진행 기록 |
 
 진행 정보와 미션은 모두 요청 사용자 소유 행으로 제한됩니다. 포인트 잔액은 `Point_transactions` 합계이며, 미션 완료와 복구는 InnoDB 트랜잭션으로 처리합니다.
 
@@ -44,7 +45,7 @@ Streak 복구 기본값은 개발용 임시 정책입니다. `.env`에서 `STREA
 
 레벨 임계치가 아직 확정되지 않아 미션 완료 시 누적 XP만 DB에 쌓고 `Characters.level`은 유지합니다. API는 XP 임계치 필드를 `null`로 반환합니다.
 
-건강 연동은 `Health_daily_summaries`에 오늘 걸음 수·활동 칼로리·운동시간 합계만 저장합니다. HealthKit/Health Connect의 읽기 권한만 요청하며, `걸음`과 `분` 미션은 동기화된 요약값으로 진행도를 계산합니다. 표준 건강 데이터에 반복 횟수는 없으므로 `회` 미션은 인증된 사용자가 앱에서 직접 기록합니다. 이 건강 수치는 클라이언트 네이티브 앱에서 제공되므로 보안상 서버가 원본 건강 플랫폼과 직접 검증하는 구조는 아닙니다.
+`db/007_health_activity.sql`의 `Health_connections`, `Activity_records`, `Daily_activity`, `Mission_verify_rules`, `Mission_verifications`를 건강 데이터 모델의 기준으로 사용합니다. 현재 앱 API는 일일 합계를 `Daily_activity`에 기록해 화면과 걸음/시간 미션 진행도에 사용합니다. 원본 `Activity_records`의 신뢰도 계산, 기록 재사용 차단, `Mission_verifications` 기반 감액 보상은 아직 API에 연결되지 않았습니다. 따라서 현재 건강 합계는 요청 사용자의 로그인만 확인하고 원본 HealthKit/Health Connect 제공처를 서버에서 검증하지 않습니다. 이 검증은 배포 전 후속 작업입니다.
 
 실제 휴대전화에서 사용할 때는 프론트 `.env.production`의 `VITE_API_URL`을 휴대전화에서 접근 가능한 HTTPS 백엔드 주소로 설정하고 백엔드 `CORS_ORIGIN`에 앱 origin을 허용해야 합니다. 로컬 USB 디버깅은 기기에서 PC의 LAN 주소를 사용하세요. Android WebView의 `localhost`는 PC가 아니라 휴대전화 자신을 가리킵니다.
 
@@ -65,14 +66,15 @@ Streak 복구 기본값은 개발용 임시 정책입니다. `.env`에서 `STREA
 `exercise_place=outdoor` 이면 `avoid_motion` 은 서버가 빈 값으로 저장합니다.
 
 ## 공용 테스트 계정
-`db/004_test_account.sql` 과 `db/007_test_account_progress.sql` 이 로컬 개발·시연 전용 계정과 진행 기록을 생성합니다.
+`db/004_test_account.sql` 이 테스트 계정을 생성합니다. 시연 진척도는 선택적으로 `scripts/seed_test_account_progress.sql`을 로컬에서만 수동 실행하세요. 이 스크립트는 기본 마이그레이션에 포함되지 않습니다.
 - 아이디 `testuser01` / 비밀번호 `Test1234!`
 - 온보딩 완료, 최근 6일 완료 기록, 6일 연속 Streak, 미션 완료 원장 기준 약 200 FitPoint
-- 실제 배포 DB에는 테스트 계정과 시연용 기록을 적용하지 마세요.
+- 테스트 계정과 시연용 기록은 실제 배포 DB에 적용하지 마세요.
+- 수동 적용 예: `mysql -u <user> -p fitbuddy < scripts/seed_test_account_progress.sql`
 
 ## 서버 주소 / CORS
 - 포트 기본값 **4000** (프론트 `apps/frontend/src/api/axios.ts` 의 baseURL)
-- CORS: `localhost`, `127.0.0.1` 의 모든 포트 허용. 특정 주소만 허용하려면 `.env` 에 `CORS_ORIGIN=http://localhost:5173`
+- CORS: `localhost`, `127.0.0.1`의 개발 포트와 iOS `capacitor://localhost`를 허용합니다. `CORS_ORIGIN`을 설정하면 프론트 주소와 네이티브 앱 origin을 모두 포함하세요.
 
 ## 참고
 - 비밀번호는 bcrypt 해시로만 저장합니다.
@@ -95,3 +97,19 @@ const missions = await getTodayMissions(req.user.user_number); // KST 오늘, �
   - 점수: 목표 태그 일치 3 + 난이도 근접도(일치 2 / 한 단계 차이 1)
   - 최근 7일 미션은 후순위(부족하면 오래된 것부터 재배정 → 매일 3개 보장), 근력·유산소·스트레칭 분산
 - 테스트: `test/recommend.test.js` (R-01~R-08)
+
+## 건강 데이터 연동·미션 인증 DB (`db/007_health_activity.sql`)
+모바일 앱이 OS 헬스허브(Android Health Connect / iOS HealthKit)에서 읽은 데이터를 저장하는 테이블입니다.
+앱은 MySQL에 직접 접속하지 않고, 지금처럼 백엔드 API(`/api/v1`)를 통해 저장·조회합니다.
+
+| 테이블 | 용도 |
+|---|---|
+| Health_connections | 사용자별 헬스허브 연결 상태, 마지막 동기화 시각 |
+| Activity_records | 헬스허브 원본 기록(걸음·운동 세션 등). `is_trusted` 는 DB가 계산(직접 입력·출처 불명 = 0) |
+| Daily_activity | 하루 합계(걸음 수, 운동 시간, kcal) — 대시보드 표시용 |
+| Mission_verify_rules | 미션별 인증 기준(걷기 = 걸음 수, 그 밖의 분 단위 = 운동 시간). 횟수 미션은 기준 없음 |
+| Mission_verifications | 미션 인증 결과와 보상 배율(verified 1.00 / unverified 0.50 / rejected 0.00) |
+
+- 부정 방지: 같은 기록(`platform` + `external_id`)은 재전송·다른 계정 전송 불가, 운동 기록 1건은 미션 1건에만 사용
+- `Activity_records`/`Mission_verifications` 신뢰 검증은 현재 API에 아직 연결되지 않았습니다.
+- 테스트: `test/health_db.test.js` (H-01~H-06)

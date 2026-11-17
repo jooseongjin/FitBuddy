@@ -1,5 +1,6 @@
--- 로컬 개발용 테스트 계정의 시연 진행 기록 (실제 배포 DB에는 적용하지 말 것)
--- 최근 6일 하루 1개 미션 완료, 현재 6일 연속 기록, FitPoint 원장 약 200점
+-- 로컬 개발용 테스트 계정 시연 데이터. 배포 DB에서는 절대 실행하지 말 것.
+-- 수동 실행: mysql -u <user> -p fitbuddy < scripts/seed_test_account_progress.sql
+-- 최근 6일 하루 1개 미션 완료, 현재 6일 연속 기록, 미션 원장 기준 약 200 FitPoint
 USE fitbuddy;
 
 INSERT IGNORE INTO User_missions

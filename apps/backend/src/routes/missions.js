@@ -12,14 +12,17 @@ const toDateKey = (value) => value instanceof Date
   ? new Date(value.getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10)
   : String(value).slice(0, 10);
 
-router.get('/recommended', auth, async (req, res, next) => {
+const recommended = async (req, res, next) => {
   try {
     const missions = await getTodayMissions(req.user.user_number);
     res.json({ success: true, data: missions });
   } catch (error) {
     next(error);
   }
-});
+};
+
+router.get('/recommended', auth, recommended);
+router.get('/today', auth, recommended);
 
 router.post('/:id/progress', auth, async (req, res, next) => {
   try {
@@ -53,13 +56,16 @@ router.post('/:id/progress', auth, async (req, res, next) => {
   }
 });
 
-router.post('/:id/complete', auth, async (req, res, next) => {
+const complete = async (req, res, next, missionId = req.params.id) => {
   try {
-    const data = await completeMission(req.user.user_number, Number(req.params.id));
+  const data = await completeMission(req.user.user_number, Number(missionId));
     res.json({ success: true, data });
   } catch (error) {
     next(error);
   }
-});
+};
+
+router.post('/:id/complete', auth, (req, res, next) => complete(req, res, next));
+router.post('/today/:missionId/complete', auth, (req, res, next) => complete(req, res, next, req.params.missionId));
 
 module.exports = router;

@@ -16,9 +16,16 @@ router.get('/today', auth, async (req, res, next) => {
   try {
     const date = todayKST();
     const [[summary]] = await pool.query(
-      `SELECT metric_date, steps, active_calories, exercise_minutes, source, synced_at
-         FROM Health_daily_summaries
-        WHERE Users_user_number = ? AND metric_date = ?`,
+      `SELECT d.activity_date AS metric_date, d.steps, d.calories_kcal AS active_calories,
+              d.active_minutes AS exercise_minutes,
+              (SELECT c.platform FROM Health_connections c
+                WHERE c.Users_user_number = d.Users_user_number AND c.conn_status = 'connected'
+                ORDER BY c.last_synced_at DESC LIMIT 1) AS source,
+              (SELECT c.last_synced_at FROM Health_connections c
+                WHERE c.Users_user_number = d.Users_user_number AND c.conn_status = 'connected'
+                ORDER BY c.last_synced_at DESC LIMIT 1) AS synced_at
+         FROM Daily_activity d
+        WHERE d.Users_user_number = ? AND d.activity_date = ?`,
       [req.user.user_number, date],
     );
     res.json({
@@ -40,23 +47,29 @@ router.put('/today', auth, async (req, res, next) => {
     const date = todayKST();
     await connection.beginTransaction();
     await connection.query(
-      `INSERT INTO Health_daily_summaries
-         (Users_user_number, metric_date, steps, active_calories, exercise_minutes, source)
-       VALUES (?, ?, ?, ?, ?, ?)
-       ON DUPLICATE KEY UPDATE steps = VALUES(steps), active_calories = VALUES(active_calories),
-                               exercise_minutes = VALUES(exercise_minutes), source = VALUES(source)`,
-      [req.user.user_number, date, summary.steps, summary.active_calories, summary.exercise_minutes, summary.source],
+      `INSERT INTO Health_connections (Users_user_number, platform, conn_status, last_synced_at)
+       VALUES (?, ?, 'connected', NOW())
+       ON DUPLICATE KEY UPDATE conn_status = 'connected', last_synced_at = NOW()`,
+      [req.user.user_number, summary.source],
+    );
+    await connection.query(
+      `INSERT INTO Daily_activity
+         (Users_user_number, activity_date, steps, verified_steps, active_minutes, calories_kcal)
+       VALUES (?, ?, ?, 0, ?, ?)
+       ON DUPLICATE KEY UPDATE steps = VALUES(steps), active_minutes = VALUES(active_minutes),
+                               calories_kcal = VALUES(calories_kcal)`,
+      [req.user.user_number, date, summary.steps, summary.exercise_minutes, summary.active_calories],
     );
     await connection.query(
       `UPDATE User_missions um
          JOIN Missions m ON m.Missions_id = um.Missions_id
-         JOIN Health_daily_summaries h
-           ON h.Users_user_number = um.Users_user_number AND h.metric_date = um.assigned_date
+         JOIN Daily_activity h
+           ON h.Users_user_number = um.Users_user_number AND h.activity_date = um.assigned_date
           SET um.progress_value = LEAST(m.target_value,
                 CASE m.target_unit
                   WHEN '걸음' THEN h.steps
-                  WHEN '분' THEN h.exercise_minutes
-                  WHEN 'kcal' THEN h.active_calories
+                  WHEN '분' THEN h.active_minutes
+                  WHEN 'kcal' THEN h.calories_kcal
                   ELSE um.progress_value
                 END)
         WHERE um.Users_user_number = ? AND um.assigned_date = ?
@@ -65,9 +78,16 @@ router.put('/today', auth, async (req, res, next) => {
     );
     await connection.commit();
     const [[saved]] = await connection.query(
-      `SELECT metric_date, steps, active_calories, exercise_minutes, source, synced_at
-         FROM Health_daily_summaries
-        WHERE Users_user_number = ? AND metric_date = ?`,
+      `SELECT d.activity_date AS metric_date, d.steps, d.calories_kcal AS active_calories,
+              d.active_minutes AS exercise_minutes,
+              (SELECT c.platform FROM Health_connections c
+                WHERE c.Users_user_number = d.Users_user_number AND c.conn_status = 'connected'
+                ORDER BY c.last_synced_at DESC LIMIT 1) AS source,
+              (SELECT c.last_synced_at FROM Health_connections c
+                WHERE c.Users_user_number = d.Users_user_number AND c.conn_status = 'connected'
+                ORDER BY c.last_synced_at DESC LIMIT 1) AS synced_at
+         FROM Daily_activity d
+        WHERE d.Users_user_number = ? AND d.activity_date = ?`,
       [req.user.user_number, date],
     );
     res.json({ success: true, data: saved });
