@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 export const OnboardingStep3: React.FC = () => {
   const navigate = useNavigate();
   const place = localStorage.getItem('onboarding_place') || 'indoor';
-  
+
   const [avoidMotion, setAvoidMotion] = useState<string[]>([]);
   const [bodyLimit, setBodyLimit] = useState<string[]>([]);
 
