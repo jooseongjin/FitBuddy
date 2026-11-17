@@ -43,17 +43,23 @@ export const Signup: React.FC = () => {
 
       // 가입 직후 같은 정보로 로그인해 토큰·계정 정보를 저장 → 대시보드·내 정보에 가입한 계정이 표시됨
       // (로그인에 실패해도 가입은 완료된 상태라 그대로 진행하고, 나중에 로그인 화면에서 로그인하면 됨)
+      let loggedIn = false;
       try {
         const login = await api.post('/auth/login', { user_id: userId, password });
         localStorage.setItem('token', login.data.token);
         saveLoginUser(login.data.user, { email });
+        loggedIn = true;
       } catch {
         // 무시
       }
 
       alert('가입을 환영합니다! 맞춤 설문을 시작합니다.');
-      // 이전 사용자의 잔액·캐릭터 등이 남지 않도록 계정 전환 후 새로 불러와 이동
-      enterAccount('/onboarding/step1');
+      if (loggedIn) enterAccount('/onboarding/step1');
+      else {
+        localStorage.removeItem('token');
+        saveLoginUser(null);
+        enterAccount('/');
+      }
     } catch (err: any) {
       if (err.response?.status === 409) {
         setErrors({ server: '이미 사용 중인 아이디 또는 이메일입니다.' });

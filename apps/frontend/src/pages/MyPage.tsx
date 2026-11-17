@@ -13,10 +13,8 @@ import {
   UserPen,
 } from 'lucide-react';
 import { BottomNav } from '../components/BottomNav';
-import { AccountMenu } from '../components/AccountMenu';
 import { CharacterAvatar } from '../components/CharacterAvatar';
 import { CharacterStage } from '../components/CharacterStage';
-import { FitPointChip } from '../components/FitPointChip';
 import { CATEGORY_ICON, ICON_SIZE } from '../components/categoryIcons';
 import {
   BACKGROUND_ITEMS,
@@ -35,6 +33,7 @@ import { StreakRepairSheet } from '../components/progress/StreakRepairSheet';
 import { Toast } from '../components/progress/Toast';
 import { AnimatedNumber } from '../components/progress/AnimatedNumber';
 import { TIME_OPTIONS, displayName, goalTitle, readProfile } from '../lib/profileStorage';
+import { PageHeaderActions } from '../components/PageHeaderActions';
 import {
   REMINDER_TIMES,
   readReminder,
@@ -163,18 +162,7 @@ export const MyPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#F8F5EC] pb-24 max-w-md mx-auto shadow-md">
       {/* 상단 헤더 - 보유 FitPoint 노출 */}
-      <div className="bg-white sticky top-0 z-10 shadow-sm">
-        <div className="px-4 py-3 border-b border-gray-100 flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <div>
-              <h1 className="text-base font-bold text-gray-800">마이페이지</h1>
-              <FitPointChip amount={fitPoint} />
-            </div>
-          </div>
-          {/* 오른쪽 캐릭터 메뉴: 계정 정보·이용 가이드·로그아웃 (상점·마이페이지 같은 위치) */}
-          <AccountMenu />
-        </div>
-      </div>
+      <PageHeaderActions title="마이페이지" amount={fitPoint} />
 
       <div className="p-4 space-y-4">
         {/* 불러오기 실패 안내 (이전 값이 있으면 그대로 보여주고 다시 시도만 제공) */}

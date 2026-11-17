@@ -4,6 +4,7 @@ import { Login } from './pages/Login';
 import { Signup } from './pages/Signup';
 import { OnboardingStep1 } from './pages/OnboardingStep1';
 import { OnboardingStep2 } from './pages/OnboardingStep2';
+import { OnboardingStep3 } from './pages/OnboardingStep3'; // 👈 1. 이 줄 추가!
 import { OnboardingComplete } from './pages/OnboardingComplete';
 import { Dashboard } from './pages/Dashboard';
 import { Missions } from './pages/Missions';
@@ -32,6 +33,7 @@ function App() {
           <Route path="/signup" element={<Signup />} />
           <Route path="/onboarding/step1" element={<OnboardingStep1 />} />
           <Route path="/onboarding/step2" element={<OnboardingStep2 />} />
+          <Route path="/onboarding/step3" element={<OnboardingStep3 />} /> {/* 👈 2. 이 줄 추가! */}
           <Route path="/onboarding/complete" element={<OnboardingComplete />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/missions" element={<Missions />} />

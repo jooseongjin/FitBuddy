@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { progressApi } from '../api/progressClient';
+import { mockProgressServer } from '../mocks/mockProgressServer';
 import { ApiError, type CharacterProgress, type MissionRewardResult, type StreakState } from '../api/progressTypes';
 import type { RepairRequest } from '../api/progressApi';
 import { decideEntryCelebration, decideMissionCelebration, type CelebrationDecision } from '../domain/levelRules';
@@ -12,6 +13,8 @@ import { LevelUpCelebrationHost } from '../components/progress/LevelUpCelebratio
 const REFRESH_ON_ERROR = new Set(['MISSED_DATE_MISMATCH', 'STREAK_NOT_BROKEN', 'ALREADY_REPAIRED', 'STREAK_NOT_REPAIRABLE', 'MONTHLY_LIMIT_EXCEEDED']);
 
 const loadProgress = () => Promise.all([progressApi.getCharacterProgress(), progressApi.getStreak()]);
+const subscribeAccount = (onChange: () => void) => mockProgressServer.subscribe(onChange);
+const readAccountKey = () => mockProgressServer.activeAccountKey;
 
 /**
  * 레벨·XP·Streak 공용 상태. CharacterStoreProvider 안쪽에 둔다 (FP 잔액 공유)
@@ -19,6 +22,7 @@ const loadProgress = () => Promise.all([progressApi.getCharacterProgress(), prog
  */
 export const ProgressStoreProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { setFitPoint } = useCharacterStore();
+  const accountKey = useSyncExternalStore(subscribeAccount, readAccountKey, readAccountKey);
   const [character, setCharacter] = useState<CharacterProgress | null>(null);
   const [streak, setStreak] = useState<StreakState | null>(null);
   const [status, setStatus] = useState<LoadStatus>('loading');
@@ -47,7 +51,7 @@ export const ProgressStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     } catch (error) {
       applyLoadError(error);
     }
-  }, [applyLoaded, applyLoadError]);
+  }, [accountKey, applyLoaded, applyLoadError]);
 
   // 처음 한 번 불러오기 (화면을 떠난 뒤 도착한 응답은 무시)
   useEffect(() => {

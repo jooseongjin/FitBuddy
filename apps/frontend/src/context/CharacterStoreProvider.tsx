@@ -43,6 +43,7 @@ const loadSaved = (): SavedCharacter | null => {
 
 const subscribeMock = (onChange: () => void) => mockProgressServer.subscribe(onChange);
 const readMockBalance = () => mockProgressServer.balance;
+const readAccountKey = () => mockProgressServer.activeAccountKey;
 
 /**
  * 상점·마이페이지·홈이 함께 쓰는 FitPoint·보유·착용 상태
@@ -52,6 +53,7 @@ const readMockBalance = () => mockProgressServer.balance;
 export const CharacterStoreProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const isMock = progressApi.isMock;
   const mockBalance = useSyncExternalStore(subscribeMock, readMockBalance);
+  const accountKey = useSyncExternalStore(subscribeMock, readAccountKey, readAccountKey);
   const [serverBalance, setServerBalance] = useState(INITIAL_FIT_POINT);
   const fitPoint = isMock ? mockBalance : serverBalance;
 
@@ -65,6 +67,7 @@ export const CharacterStoreProvider: React.FC<{ children: React.ReactNode }> = (
   useEffect(() => {
     if (isMock) return;
     let cancelled = false;
+    setServerBalance(INITIAL_FIT_POINT);
     progressApi.getBalance().then(
       (balance) => {
         if (!cancelled) setServerBalance(balance);
@@ -74,7 +77,7 @@ export const CharacterStoreProvider: React.FC<{ children: React.ReactNode }> = (
     return () => {
       cancelled = true;
     };
-  }, [isMock]);
+  }, [isMock, accountKey]);
 
   useEffect(() => {
     try {

@@ -1,7 +1,7 @@
 import { useMemo, useSyncExternalStore } from 'react';
 import { progressApi } from '../api/progressClient';
 import { mockProgressServer } from '../mocks/mockProgressServer';
-import { TODAY_MISSIONS, type MissionStatus } from '../data/missions';
+import { TODAY_MISSIONS, type MissionItem, type MissionStatus } from '../data/missions';
 import { useCompletedMissions } from './useCompletedMissions';
 
 export type MissionState = { status: MissionStatus; current: number };
@@ -15,15 +15,22 @@ const getProgress = () => (progressApi.isMock ? mockProgressServer.todayMissionP
  * - mock: mock 서버의 진행도와 완료 기록
  * TODO: API-04 /missions/recommended 응답의 진행도·mission_status로 교체 (지금 실제 서버 모드는 진행도를 몰라 '보상 대기'로 표시)
  */
-export const useMissionStates = (): Record<string, MissionState> => {
+export const useMissionStates = (missions: readonly MissionItem[] = TODAY_MISSIONS): Record<string, MissionState> => {
   const completed = useCompletedMissions();
   const progress = useSyncExternalStore(subscribe, getProgress, getProgress);
   return useMemo(
     () =>
       Object.fromEntries(
-        TODAY_MISSIONS.map((mission) => {
+        missions.map((mission) => {
+          if (!progressApi.isMock) {
+            const current = mission.serverStatus === 'completed' ? mission.target : mission.startProgress;
+            return [mission.id, {
+              status: mission.serverStatus === 'completed' ? 'done' : current >= mission.target ? 'ready' : 'in_progress',
+              current,
+            }];
+          }
           // 실제 서버 모드: 진행도를 아직 받지 못해(API-04 미연동) 막지 않고 보상 요청을 허용 — 달성 여부는 서버가 판단(409)
-          const current = progressApi.isMock ? (progress[mission.id] ?? mission.startProgress) : mission.target;
+          const current = progress[mission.id] ?? mission.startProgress;
           const status: MissionStatus = completed.includes(mission.id)
             ? 'done'
             : current >= mission.target
@@ -32,6 +39,6 @@ export const useMissionStates = (): Record<string, MissionState> => {
           return [mission.id, { status, current }];
         }),
       ),
-    [completed, progress],
+    [completed, missions, progress],
   );
 };

@@ -182,3 +182,15 @@ test('내역은 최신순·페이지 단위', async () => {
   assert.ok(first.items[0].id > first.items[4].id);
   assert.ok(first.items[4].id > second.items[0].id);
 });
+
+test('신규 계정은 데모 Streak·미션 진행도·FitPoint를 상속하지 않음', async () => {
+  mockProgressServer.setAccount('new-account');
+  assert.equal(mockProgressServer.balance, 0);
+  assert.equal((await mockProgressServer.getCharacterProgress()).level, 1);
+  assert.equal((await mockProgressServer.getStreak()).currentStreak, 0);
+  assert.deepEqual(mockProgressServer.todayCompletedMissionIds(), []);
+  assert.equal(mockProgressServer.missionCurrent('1'), 0);
+  assert.equal(mockProgressServer.missionCurrent('2'), 0);
+  assert.equal(mockProgressServer.missionCurrent('3'), 0);
+  mockProgressServer.setAccount(null);
+});

@@ -28,7 +28,6 @@ export const Login: React.FC = () => {
       // 로그인 응답에 이메일이 없어, 이메일로 로그인한 경우에만 입력한 이메일을 함께 저장
       saveLoginUser(res.data.user, userId.includes('@') ? { email: userId } : undefined);
       // 이전 사용자의 잔액·캐릭터 등이 남지 않도록 계정 전환 후 새로 불러와 이동
-      // 이전 사용자의 잔액·캐릭터 등이 남지 않도록 계정 전환 후 새로 불러와 이동
       enterAccount('/dashboard');
     } catch (err: any) {
       if (err.response?.status === 401) {

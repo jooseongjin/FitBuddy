@@ -1,85 +1,71 @@
 const express = require('express');
-const pool = require('../db');
+const { z } = require('zod');
 const auth = require('../middleware/auth');
-const recommendModule = require('../services/recommend'); // 객체든 함수든 안전하게 받기 위해 모듈 통째로 임포트
-const missionController = require('../controllers/missionController');
+const { getTodayMissions } = require('../services/recommend');
+const { completeMission, todayKST } = require('../services/progress');
+const pool = require('../db');
 const { ApiError } = require('../errors');
 
 const router = express.Router();
+const progressSchema = z.object({ increment: z.number().int().min(1).max(1000) });
+const toDateKey = (value) => value instanceof Date
+  ? new Date(value.getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10)
+  : String(value).slice(0, 10);
 
-// GET /api/v1/missions/today - 오늘의 미션 조회 (없으면 추천 엔진으로 자동 배정)
-router.get('/today', auth, async (req, res, next) => {
-    const conn = await pool.getConnection();
-    try {
-        const userNumber = req.user.userNumber;
+const recommended = async (req, res, next) => {
+  try {
+    const missions = await getTodayMissions(req.user.user_number);
+    res.json({ success: true, data: missions });
+  } catch (error) {
+    next(error);
+  }
+};
 
-        // 1. 오늘 배정된 미션 조회
-        let [rows] = await conn.query(
-            `SELECT M.Missions_id, M.title, M.description, M.exercise_type, M.environment, M.target_value, M.target_unit, M.difficulty, M.base_point, UM.mission_status 
-             FROM User_missions UM
-             JOIN Missions M ON UM.Missions_id = M.Missions_id
-             WHERE UM.Users_user_number = ? AND UM.assigned_date = CURDATE()`,
-            [userNumber]
-        );
+router.get('/recommended', auth, recommended);
+router.get('/today', auth, recommended);
 
-        // 2. 오늘 배정된 미션이 없다면 추천 엔진을 통해 미션 생성/배정 후 재조회
-        if (rows.length === 0) {
-            try {
-                // recommend.js가 내보내는 방식(단일 함수 vs 객체 내부 메서드)에 맞게 유연하게 실행
-                if (typeof recommendModule === 'function') {
-                    await recommendModule(userNumber);
-                } else if (recommendModule && typeof recommendModule.generateAndAssignMissions === 'function') {
-                    await recommendModule.generateAndAssignMissions(userNumber);
-                } else if (recommendModule && typeof recommendModule.recommendMissions === 'function') {
-                    await recommendModule.recommendMissions(userNumber);
-                } else {
-                    console.error('recommend.js에서 유효한 함수를 찾지 못했습니다.');
-                }
-            } catch (err) {
-                console.error('Recommend engine auto-assignment failed:', err);
-            }
+router.post('/:id/progress', auth, async (req, res, next) => {
+  try {
+    const { increment } = progressSchema.parse(req.body);
+    const missionId = Number(req.params.id);
+    if (!Number.isSafeInteger(missionId) || missionId < 1) throw new ApiError(400, 'VALIDATION_ERROR', '미션 번호가 올바르지 않습니다.');
+    const [[mission]] = await pool.query(
+      `SELECT um.mission_status, um.assigned_date, um.progress_value, m.target_value, m.target_unit
+         FROM User_missions um JOIN Missions m ON m.Missions_id = um.Missions_id
+        WHERE um.user_mission_id = ? AND um.Users_user_number = ?`,
+      [missionId, req.user.user_number],
+    );
+    if (!mission) throw new ApiError(404, 'MISSION_NOT_FOUND', '배정된 미션을 찾을 수 없습니다.');
+    if (toDateKey(mission.assigned_date) !== todayKST()) throw new ApiError(409, 'MISSION_NOT_TODAY', '오늘 배정된 미션만 기록할 수 있습니다.');
+    if (mission.mission_status !== 'assigned') throw new ApiError(409, 'MISSION_ALREADY_COMPLETED', '이미 완료한 미션입니다.');
+    if (mission.target_unit !== '회') throw new ApiError(400, 'MANUAL_PROGRESS_UNSUPPORTED', '이 미션의 진행도는 건강 데이터로 자동 계산됩니다.');
 
-            [rows] = await conn.query(
-                `SELECT M.Missions_id, M.title, M.description, M.exercise_type, M.environment, M.target_value, M.target_unit, M.difficulty, M.base_point, UM.mission_status 
-                 FROM User_missions UM
-                 JOIN Missions M ON UM.Missions_id = M.Missions_id
-                 WHERE UM.Users_user_number = ? AND UM.assigned_date = CURDATE()`,
-                [userNumber]
-            );
-        }
-
-        res.status(200).json({ success: true, data: rows });
-    } catch (e) {
-        next(e);
-    } finally {
-        conn.release();
-    }
+    await pool.query(
+      `UPDATE User_missions um JOIN Missions m ON m.Missions_id = um.Missions_id
+          SET um.progress_value = LEAST(m.target_value, um.progress_value + ?)
+        WHERE um.user_mission_id = ? AND um.Users_user_number = ? AND um.mission_status = 'assigned'`,
+      [increment, missionId, req.user.user_number],
+    );
+    const [[updated]] = await pool.query(
+      'SELECT progress_value FROM User_missions WHERE user_mission_id = ? AND Users_user_number = ?',
+      [missionId, req.user.user_number],
+    );
+    res.json({ success: true, data: { current_value: Number(updated.progress_value), target_value: Number(mission.target_value) } });
+  } catch (error) {
+    next(error);
+  }
 });
 
-// 3. POST /api/v1/missions/today/:missionId/complete - 미션 완료 처리 라우트 추가
-if (missionController && typeof missionController.completeMission === 'function') {
-    router.post('/today/:missionId/complete', auth, missionController.completeMission);
-} else {
-    router.post('/today/:missionId/complete', auth, async (req, res, next) => {
-        const conn = await pool.getConnection();
-        try {
-            const userNumber = req.user.userNumber;
-            const { missionId } = req.params;
+const complete = async (req, res, next, missionId = req.params.id) => {
+  try {
+  const data = await completeMission(req.user.user_number, Number(missionId));
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+};
 
-            await conn.query(
-                `UPDATE User_missions 
-                 SET mission_status = 'completed', completed_at = NOW() 
-                 WHERE Users_user_number = ? AND Missions_id = ? AND assigned_date = CURDATE()`,
-                [userNumber, missionId]
-            );
-
-            res.status(200).json({ success: true, message: '미션이 성공적으로 완료되었습니다.' });
-        } catch (e) {
-            next(e);
-        } finally {
-            conn.release();
-        }
-    });
-}
+router.post('/:id/complete', auth, (req, res, next) => complete(req, res, next));
+router.post('/today/:missionId/complete', auth, (req, res, next) => complete(req, res, next, req.params.missionId));
 
 module.exports = router;

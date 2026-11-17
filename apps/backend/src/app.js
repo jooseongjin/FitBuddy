@@ -6,7 +6,7 @@ const app = express();
 
 // CORS: 프론트 개발 서버(http://localhost:5173 등)에서 호출할 수 있도록 허용
 // CORS_ORIGIN 을 지정하면 그 주소만, 없으면 localhost / 127.0.0.1 의 모든 포트 허용
-const LOCAL_ORIGIN = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+const LOCAL_ORIGIN = /^(http:\/\/(localhost|127\.0\.0\.1)(:\d+)?|capacitor:\/\/localhost)$/;
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   const allowed = process.env.CORS_ORIGIN
@@ -26,9 +26,11 @@ app.use(express.json());
 app.get('/health', (req, res) => res.json({ ok: true }));
 app.use('/api/v1/auth', require('./routes/auth'));
 app.use('/api/v1/onboarding', require('./routes/onboarding'));
-// 미션·포인트 API(박상욱 담당)는 해당 PR에서 아래처럼 등록
-// app.use('/api/v1/missions', require('./routes/missions'));
-// app.use('/api/v1/points', require('./routes/points'));
+app.use('/api/v1/missions', require('./routes/missions'));
+app.use('/api/v1/character', require('./routes/character'));
+app.use('/api/v1/streak', require('./routes/streak'));
+app.use('/api/v1/points', require('./routes/points'));
+app.use('/api/v1/health', require('./routes/health'));
 app.use((req, res) => res.status(404).json({ success: false, code: 'NOT_FOUND', message: '존재하지 않는 경로입니다.' }));
 app.use(errorHandler);
 

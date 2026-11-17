@@ -10,15 +10,17 @@ import { useProgress } from '../context/progressStore';
 import { useMissionStates } from '../hooks/useMissionStates';
 import { shouldShowRiskBanner } from '../domain/streakRules';
 import { RISK_BANNER_HOUR } from '../config/progressConfig';
-import { TODAY_MISSIONS, progressLabel } from '../data/missions';
+import { progressLabel } from '../data/missions';
 import { MISSION_BADGE } from '../components/missionBadge';
+import { useTodayMissions } from '../hooks/useTodayMissions';
 
 export const Missions: React.FC = () => {
   const navigate = useNavigate();
   const { streak } = useProgress();
-  const states = useMissionStates();
+  const { missions, loading: missionsLoading, error: missionsError } = useTodayMissions();
+  const states = useMissionStates(missions);
 
-  const count = (status: string) => TODAY_MISSIONS.filter((mission) => states[mission.id].status === status).length;
+  const count = (status: string) => missions.filter((mission) => states[mission.id].status === status).length;
   const doneCount = count('done');
   const readyCount = count('ready');
   const showRisk = streak !== null && shouldShowRiskBanner(streak, RISK_BANNER_HOUR);
@@ -39,7 +41,7 @@ export const Missions: React.FC = () => {
         {/* 캐릭터 응원 배너 - 미션을 완료하면 XP가 쌓여 레벨이 올라요 */}
         <LevelBanner
           title={doneCount === 0 ? '오늘 첫 미션을 완료하고 연속 기록을 이어가요!' : '미션을 완료하면 XP가 쌓여 레벨이 올라요'}
-          subtitle={`오늘 ${doneCount}/${TODAY_MISSIONS.length} 완료`}
+          subtitle={`오늘 ${doneCount}/${missions.length} 완료`}
         />
 
         {/* 연속 기록이 끊길 위험 (오늘 미완료 + 20시 이후) */}
@@ -49,8 +51,8 @@ export const Missions: React.FC = () => {
             onGoMissions={() => {
               // 보상 대기 미션이 있으면 먼저, 없으면 진행 중 미션
               const next =
-                TODAY_MISSIONS.find((mission) => states[mission.id].status === 'ready') ??
-                TODAY_MISSIONS.find((mission) => states[mission.id].status !== 'done');
+                missions.find((mission) => states[mission.id].status === 'ready') ??
+                missions.find((mission) => states[mission.id].status !== 'done');
               if (next) navigate(`/missions/${next.id}`);
             }}
           />
@@ -61,11 +63,15 @@ export const Missions: React.FC = () => {
           <div className="flex justify-between items-center">
             <h2 className="text-sm font-bold text-gray-800">운동 미션</h2>
             <span className="text-xs text-gray-500">
-              진행중 {TODAY_MISSIONS.length - doneCount - readyCount} · 보상 대기 {readyCount} · 완료 {doneCount}
+              진행중 {missions.length - doneCount - readyCount} · 보상 대기 {readyCount} · 완료 {doneCount}
             </span>
           </div>
 
-          {TODAY_MISSIONS.map((m) => {
+          {missionsLoading ? (
+            <p className="py-6 text-center text-xs text-gray-500">오늘의 미션을 불러오는 중이에요.</p>
+          ) : missionsError ? (
+            <p role="alert" className="py-6 text-center text-xs text-rose-600">{missionsError}</p>
+          ) : missions.map((m) => {
             const { status, current } = states[m.id];
             const done = status === 'done';
             const badge = MISSION_BADGE[status];

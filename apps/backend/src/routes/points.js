@@ -1,22 +1,57 @@
 const express = require('express');
-const router = express.Router();
 const auth = require('../middleware/auth');
+const pool = require('../db');
+const { getBalance } = require('../services/progress');
+const { ApiError } = require('../errors');
 
-// 모든 포인트 라우트에 인증 미들웨어 적용
-router.use(auth);
+const router = express.Router();
 
-// 포인트 잔액 및 내역 조회 예시
-router.get('/', async (req, res, next) => {
-    try {
-        const userNumber = req.user.userNumber; // missions.js와 동일하게 req.user.userNumber 사용
-        // 필요시 포인트 관련 컨트롤러 로직 연결
-        res.status(200).json({ 
-            success: true, 
-            data: { userNumber, balance: 0, message: '포인트 조회 성공' } 
-        });
-    } catch (error) {
-        next(error);
+router.get('/balance', auth, async (req, res, next) => {
+  try {
+    res.json({ success: true, data: { balance: await getBalance(req.user.user_number) } });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/', auth, async (req, res, next) => {
+  try {
+    res.json({
+      success: true,
+      data: { user_number: req.user.user_number, balance: await getBalance(req.user.user_number) },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/history', auth, async (req, res, next) => {
+  try {
+    const page = Number(req.query.page ?? 1);
+    const size = Number(req.query.size ?? 20);
+    if (!Number.isInteger(page) || page < 1 || !Number.isInteger(size) || size < 1 || size > 100) {
+      throw new ApiError(400, 'VALIDATION_ERROR', '페이지 번호 또는 페이지 크기가 올바르지 않습니다.');
     }
+    const [items] = await pool.query(
+      `SELECT pt.transaction_id, pt.source, pt.amount, pt.created_at,
+              COALESCE(m.title, ci.item_name, rr.reward_name) AS title
+         FROM Point_transactions pt
+         LEFT JOIN User_missions um ON pt.source = 'mission_complete' AND pt.ref_id = um.user_mission_id
+         LEFT JOIN Missions m ON m.Missions_id = um.Missions_id
+         LEFT JOIN Customization_items ci ON pt.source = 'shop_purchase' AND pt.ref_id = ci.item_id
+         LEFT JOIN Reward_redemptions rd ON pt.source = 'reward_redeem' AND pt.ref_id = rd.redemption_id
+         LEFT JOIN Rewards rr ON rr.reward_id = rd.Rewards_reward_id
+        WHERE pt.Users_user_number = ?
+        ORDER BY pt.transaction_id DESC
+        LIMIT ? OFFSET ?`,
+      [req.user.user_number, size + 1, (page - 1) * size],
+    );
+    const hasMore = items.length > size;
+    if (hasMore) items.pop();
+    res.json({ success: true, data: { items, has_more: hasMore } });
+  } catch (error) {
+    next(error);
+  }
 });
 
 module.exports = router;

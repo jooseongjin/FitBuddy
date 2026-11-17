@@ -30,6 +30,15 @@ test('CORS: 프론트(localhost:5173) preflight 허용', async () => {
   assert.equal(r.headers.get('access-control-allow-origin'), 'http://localhost:5173');
   assert.match(r.headers.get('access-control-allow-headers'), /Authorization/);
 });
+test('CORS: iOS Capacitor 출처에서 건강 API 호출 허용', async () => {
+  const r = await call('/api/v1/health/today', 'OPTIONS', null, null, {
+    Origin: 'capacitor://localhost',
+    'Access-Control-Request-Method': 'PUT',
+    'Access-Control-Request-Headers': 'content-type,authorization',
+  });
+  assert.equal(r.status, 204);
+  assert.equal(r.headers.get('access-control-allow-origin'), 'capacitor://localhost');
+});
 test('signup 성공(201) + Streaks/Characters 생성, 비밀번호 해시 저장', async () => {
   const r = await call('/api/v1/auth/signup', 'POST', body);
   assert.equal(r.status, 201); assert.equal(r.json.success, true);
@@ -93,6 +102,125 @@ test('온보딩: 저장 201, 중복 409, 조회, 수정 (snake_case)', async () 
 });
 test('온보딩: 잘못된 값 400', async () => {
   assert.equal((await call('/api/v1/onboarding', 'PUT', { ...ob, goal: 'abc' }, token)).status, 400);
+});
+test('추천 API: 오늘 미션 3개 응답 및 DB 배정 확인', async () => {
+  const r = await call('/api/v1/missions/recommended', 'GET', null, token);
+  assert.equal(r.status, 200);
+  assert.equal(r.json.success, true);
+  assert.equal(r.json.data.length, 3);
+
+  const [[counts]] = await pool.query(
+    `SELECT COUNT(*) AS mission_count, COUNT(DISTINCT Missions_id) AS unique_count
+       FROM User_missions
+      WHERE Users_user_number = (SELECT user_number FROM Users WHERE user_id = ?)
+        AND assigned_date = DATE(UTC_TIMESTAMP() + INTERVAL 9 HOUR)`,
+    [uid],
+  );
+  assert.equal(counts.mission_count, 3);
+  assert.equal(counts.unique_count, 3);
+});
+test('신규 계정 진행 API: 캐릭터·Streak·포인트가 DB 초기값을 반환', async () => {
+  const [character, streak, balance, history] = await Promise.all([
+    call('/api/v1/character', 'GET', null, token),
+    call('/api/v1/streak', 'GET', null, token),
+    call('/api/v1/points/balance', 'GET', null, token),
+    call('/api/v1/points/history', 'GET', null, token),
+  ]);
+  assert.equal(character.status, 200);
+  assert.equal(character.json.data.level, 1);
+  assert.equal(character.json.data.total_earned_xp, 0);
+  assert.equal(streak.status, 200);
+  assert.equal(streak.json.data.current_streak, 0);
+  assert.equal(balance.json.data.balance, 0);
+  assert.deepEqual(history.json.data.items, []);
+});
+test('건강 동기화: 오늘 지표를 저장하고 미션 진행도에 반영하며 목표 전 보상 차단', async () => {
+  const before = await call('/api/v1/health/today', 'GET', null, token);
+  assert.equal(before.status, 200);
+  assert.equal(before.json.data.steps, 0);
+
+  const missions = await call('/api/v1/missions/recommended', 'GET', null, token);
+  const firstMission = missions.json.data[0];
+  const blocked = await call(`/api/v1/missions/${firstMission.user_mission_id}/complete`, 'POST', {}, token);
+  assert.equal(blocked.status, 409);
+  assert.equal(blocked.json.code, 'MISSION_NOT_ACHIEVED');
+
+  const sync = await call('/api/v1/health/today', 'PUT', {
+    steps: 100000,
+    active_calories: 1000,
+    exercise_minutes: 1000,
+    source: 'healthkit',
+  }, token);
+  assert.equal(sync.status, 200);
+  assert.equal(sync.json.data.steps, 100000);
+
+  const refreshed = await call('/api/v1/missions/recommended', 'GET', null, token);
+  assert.ok(refreshed.json.data.every((mission) => mission.current_value >= mission.target_value || mission.target_unit === '회'));
+});
+test('반복 미션 진행 기록: 본인 오늘 미션만 횟수를 올리고 목표 전 완료를 거부', async () => {
+  const missions = await call('/api/v1/missions/recommended', 'GET', null, token);
+  const repeated = missions.json.data.find((mission) => mission.target_unit === '회');
+  assert.ok(repeated, '테스트 사용자의 오늘 추천에 반복 미션이 있어야 함');
+  const progress = await call(`/api/v1/missions/${repeated.user_mission_id}/progress`, 'POST', { increment: 1 }, token);
+  assert.equal(progress.status, 200);
+  assert.equal(progress.json.data.current_value, 1);
+  if (repeated.target_value > 1) {
+    const complete = await call(`/api/v1/missions/${repeated.user_mission_id}/complete`, 'POST', {}, token);
+    assert.equal(complete.status, 409);
+    assert.equal(complete.json.code, 'MISSION_NOT_ACHIEVED');
+  }
+});
+test('미션 완료: DB 원장·XP·Streak 갱신 및 중복 완료 방지', async () => {
+  const recommended = await call('/api/v1/missions/recommended', 'GET', null, token);
+  const missionId = recommended.json.data[0].user_mission_id;
+  const completed = await call(`/api/v1/missions/${missionId}/complete`, 'POST', {}, token);
+  assert.equal(completed.status, 200);
+  assert.ok(completed.json.data.earned_point > 0);
+  assert.equal(completed.json.data.balance, completed.json.data.earned_point);
+  assert.equal(completed.json.data.streak.current, 1);
+  assert.equal((await call(`/api/v1/missions/${missionId}/complete`, 'POST', {}, token)).status, 409);
+
+  const [character, streak, balance, history] = await Promise.all([
+    call('/api/v1/character', 'GET', null, token),
+    call('/api/v1/streak', 'GET', null, token),
+    call('/api/v1/points/balance', 'GET', null, token),
+    call('/api/v1/points/history', 'GET', null, token),
+  ]);
+  assert.equal(character.json.data.total_earned_xp, completed.json.data.earned_xp);
+  assert.equal(streak.json.data.current_streak, 1);
+  assert.equal(balance.json.data.balance, completed.json.data.earned_point);
+  assert.equal(history.json.data.items.length, 1);
+});
+test('Streak 복구: 어제 기록을 복구하고 포인트 원장에서 비용 차감', async () => {
+  await pool.query(
+    `UPDATE Streaks
+        SET current_streak = 3,
+            last_completed_date = DATE(UTC_TIMESTAMP() + INTERVAL 9 HOUR) - INTERVAL 2 DAY
+      WHERE Users_user_number = (SELECT user_number FROM Users WHERE user_id = ?)`,
+    [uid],
+  );
+  await pool.query(
+    `INSERT INTO Point_transactions (Users_user_number, source, amount)
+     SELECT user_number, 'mission_complete', 400 FROM Users WHERE user_id = ?`,
+    [uid],
+  );
+  const [[before]] = await pool.query(
+    `SELECT COALESCE(SUM(amount), 0) AS balance FROM Point_transactions
+      WHERE Users_user_number = (SELECT user_number FROM Users WHERE user_id = ?)`,
+    [uid],
+  );
+  const [[date]] = await pool.query('SELECT DATE_FORMAT(DATE(UTC_TIMESTAMP() + INTERVAL 9 HOUR) - INTERVAL 1 DAY, \'%Y-%m-%d\') AS missed_date');
+
+  const repaired = await call('/api/v1/streak/repair', 'POST', { missed_date: date.missed_date, method: 'points' }, token);
+  assert.equal(repaired.status, 200);
+  const [streak, balance] = await Promise.all([
+    call('/api/v1/streak', 'GET', null, token),
+    call('/api/v1/points/balance', 'GET', null, token),
+  ]);
+  assert.equal(streak.json.data.current_streak, 3);
+  assert.equal(streak.json.data.last_completed_date, date.missed_date);
+  assert.equal(balance.json.data.balance, Number(before.balance) - 300);
+  assert.equal((await call('/api/v1/streak/repair', 'POST', { missed_date: date.missed_date, method: 'points' }, token)).status, 409);
 });
 test('없는 경로 404', async () => {
   const r = await call('/api/v1/nothing');
