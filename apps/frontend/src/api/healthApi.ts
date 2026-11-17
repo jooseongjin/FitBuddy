@@ -51,12 +51,18 @@ const syncNativeHealth = async (requestPermissions: boolean): Promise<HealthMetr
 
   const range = todayRange();
   const canRead = (type: typeof requested[number]) => authorization.readAuthorized.includes(type);
-  const [stepsResult, caloriesResult, workoutResult] = await Promise.all([
+  const [stepsResult, stepSamples, caloriesResult, calorieSamples, workoutResult] = await Promise.all([
     canRead('steps')
       ? Health.queryAggregated({ ...range, dataType: 'steps', bucket: 'day', aggregation: 'sum' }).catch(() => ({ samples: [] }))
       : Promise.resolve({ samples: [] }),
+    canRead('steps')
+      ? Health.readSamples({ ...range, dataType: 'steps', limit: 5000 }).catch(() => ({ samples: [] }))
+      : Promise.resolve({ samples: [] }),
     canRead('calories')
       ? Health.queryAggregated({ ...range, dataType: 'calories', bucket: 'day', aggregation: 'sum' }).catch(() => ({ samples: [] }))
+      : Promise.resolve({ samples: [] }),
+    canRead('calories')
+      ? Health.readSamples({ ...range, dataType: 'calories', limit: 5000 }).catch(() => ({ samples: [] }))
       : Promise.resolve({ samples: [] }),
     canRead('workouts')
       ? Health.queryWorkouts({ ...range, limit: 500 }).catch(() => ({ workouts: [] }))
@@ -65,11 +71,51 @@ const syncNativeHealth = async (requestPermissions: boolean): Promise<HealthMetr
 
   const exerciseMinutes = Math.round(workoutResult.workouts.reduce((minutes, workout) => minutes + workout.duration / 60, 0));
   const source = Capacitor.getPlatform() === 'ios' ? 'healthkit' : 'health_connect';
+  const deviceType = (value?: string): 'watch' | 'phone' | 'other' | 'unknown' => {
+    if (value === 'watch') return 'watch';
+    if (value === 'phone') return 'phone';
+    if (value === 'fitnessBand' || value === 'ring') return 'other';
+    return 'unknown';
+  };
+  const records = [
+    ...stepSamples.samples.flatMap((sample) => sample.platformId ? [{
+      external_id: sample.platformId,
+      record_type: 'steps' as const,
+      value: sample.value,
+      unit: 'count' as const,
+      start_at: sample.startDate,
+      end_at: sample.endDate,
+      source_app: sample.sourceId ?? null,
+      device_type: deviceType(sample.deviceType),
+    }] : []),
+    ...calorieSamples.samples.flatMap((sample) => sample.platformId ? [{
+      external_id: sample.platformId,
+      record_type: 'calories' as const,
+      value: sample.value,
+      unit: 'kcal' as const,
+      start_at: sample.startDate,
+      end_at: sample.endDate,
+      source_app: sample.sourceId ?? null,
+      device_type: deviceType(sample.deviceType),
+    }] : []),
+    ...workoutResult.workouts.flatMap((workout) => workout.platformId ? [{
+      external_id: workout.platformId,
+      record_type: 'exercise' as const,
+      exercise_type: workout.workoutType,
+      value: workout.duration / 60,
+      unit: 'min' as const,
+      start_at: workout.startDate,
+      end_at: workout.endDate,
+      source_app: workout.sourceId ?? null,
+      device_type: 'unknown' as const,
+    }] : []),
+  ];
   const { data } = await api.put<{ data: HealthMetrics }>('/health/today', {
     steps: sum(stepsResult.samples.map((sample) => sample.value)),
     active_calories: sum(caloriesResult.samples.map((sample) => sample.value)),
     exercise_minutes: exerciseMinutes,
     source,
+    records,
   });
 
   if (typeof window !== 'undefined') window.dispatchEvent(new Event('fitbuddy:health-synced'));

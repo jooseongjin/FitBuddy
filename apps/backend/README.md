@@ -45,7 +45,9 @@ Streak 복구 기본값은 개발용 임시 정책입니다. `.env`에서 `STREA
 
 레벨 임계치가 아직 확정되지 않아 미션 완료 시 누적 XP만 DB에 쌓고 `Characters.level`은 유지합니다. API는 XP 임계치 필드를 `null`로 반환합니다.
 
-`db/007_health_activity.sql`의 `Health_connections`, `Activity_records`, `Daily_activity`, `Mission_verify_rules`, `Mission_verifications`를 건강 데이터 모델의 기준으로 사용합니다. 현재 앱 API는 일일 합계를 `Daily_activity`에 기록해 화면과 걸음/시간 미션 진행도에 사용합니다. 원본 `Activity_records`의 신뢰도 계산, 기록 재사용 차단, `Mission_verifications` 기반 감액 보상은 아직 API에 연결되지 않았습니다. 따라서 현재 건강 합계는 요청 사용자의 로그인만 확인하고 원본 HealthKit/Health Connect 제공처를 서버에서 검증하지 않습니다. 이 검증은 배포 전 후속 작업입니다.
+`db/007_health_activity.sql`의 `Health_connections`, `Activity_records`, `Daily_activity`, `Mission_verify_rules`, `Mission_verifications`를 사용합니다. 건강 동기화는 stable `external_id`를 원본 기록에 저장해 재전송·계정 간 재사용을 막고, 미션 완료는 `Mission_verify_rules`를 확인해 인증 결과를 기록합니다. 인증 규칙이 있는 걸음/운동시간 미션은 `verified` 보상 배율 1.00, 직접 기록하는 횟수 미션은 `unverified` 0.50 배율로 원장에 남깁니다.
+
+센서 출처는 `HEALTH_TRUSTED_SOURCE_IDS` 환경변수(쉼표 구분, 기본값은 Samsung Health 및 Android Health Connect 패키지) allowlist를 이용해 분류합니다. 다만 `source_app`과 원본 payload 자체는 클라이언트가 전송하므로, allowlist는 완전한 위변조 방지/플랫폼 서명이 아닙니다. 실제 포인트가 운영되는 배포 전에 플랫폼 증명 또는 추가 이상 탐지와 실제 Health Connect 기록 검증을 진행하세요. 수동 반복 API는 요청당 +1만 허용하지만 여러 번 호출할 수 있으므로 인증된 운동 횟수 증명은 별도 후속 과제입니다.
 
 실제 휴대전화에서 사용할 때는 프론트 `.env.production`의 `VITE_API_URL`을 휴대전화에서 접근 가능한 HTTPS 백엔드 주소로 설정하고 백엔드 `CORS_ORIGIN`에 앱 origin을 허용해야 합니다. 로컬 USB 디버깅은 기기에서 PC의 LAN 주소를 사용하세요. Android WebView의 `localhost`는 PC가 아니라 휴대전화 자신을 가리킵니다.
 
