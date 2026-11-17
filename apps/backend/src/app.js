@@ -22,7 +22,7 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(express.json());
+app.use(express.json({ limit: '512kb' }));
 app.get('/health', (req, res) => res.json({ ok: true }));
 app.use('/api/v1/auth', require('./routes/auth'));
 app.use('/api/v1/onboarding', require('./routes/onboarding'));

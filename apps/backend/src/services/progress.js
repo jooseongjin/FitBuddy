@@ -146,9 +146,15 @@ async function completeMission(userNumber, userMissionId) {
 
     const [[mission]] = await connection.query(
       `SELECT um.user_mission_id, um.mission_status, um.progress_value, um.assigned_date,
-              m.Missions_id, m.base_point, m.target_value, m.target_unit
+              m.Missions_id, m.base_point, m.target_value, m.target_unit,
+              r.metric AS verify_metric, r.min_value AS required_value,
+              COALESCE(d.verified_steps, 0) AS verified_steps,
+              COALESCE(d.active_minutes, 0) AS verified_minutes
          FROM User_missions um
          JOIN Missions m ON m.Missions_id = um.Missions_id
+         LEFT JOIN Mission_verify_rules r ON r.Missions_id = m.Missions_id
+         LEFT JOIN Daily_activity d
+           ON d.Users_user_number = um.Users_user_number AND d.activity_date = um.assigned_date
         WHERE um.user_mission_id = ? AND um.Users_user_number = ?
         FOR UPDATE`,
       [userMissionId, userNumber],
@@ -164,8 +170,25 @@ async function completeMission(userNumber, userMissionId) {
       });
     }
 
+    const verifyMetric = mission.verify_metric ?? null;
+    const measuredValue = verifyMetric === 'steps'
+      ? Number(mission.verified_steps)
+      : verifyMetric === 'exercise_minutes'
+        ? Number(mission.verified_minutes)
+        : Number(mission.progress_value);
+    if (verifyMetric && measuredValue < Number(mission.required_value)) {
+      throw new ApiError(409, 'MISSION_NOT_VERIFIED', '건강 기록이 미션 인증 기준에 도달하지 않았습니다.', {
+        metric: verifyMetric,
+        current: measuredValue,
+        required: Number(mission.required_value),
+      });
+    }
+    const verifyStatus = verifyMetric ? 'verified' : 'unverified';
+    const verificationMultiplier = verifyMetric ? 1 : 0.5;
+
     const plan = await getPlan(userNumber, connection);
-    const multiplier = plan === 'premium' ? 1.5 : 1;
+    const planMultiplier = plan === 'premium' ? 1.5 : 1;
+    const multiplier = planMultiplier * verificationMultiplier;
     const basePoint = Number(mission.base_point);
     const earnedPoint = Math.floor(basePoint * multiplier);
     const [[character]] = await connection.query(
@@ -183,6 +206,14 @@ async function completeMission(userNumber, userMissionId) {
       [userMissionId, userNumber],
     );
     if (!updated.affectedRows) throw new ApiError(409, 'MISSION_ALREADY_COMPLETED', '이미 완료한 미션입니다.');
+
+    await connection.query(
+      `INSERT INTO Mission_verifications
+         (User_missions_user_mission_id, verify_status, metric, measured_value, required_value, reward_multiplier)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [userMissionId, verifyStatus, verifyMetric, measuredValue,
+        verifyMetric ? Number(mission.required_value) : Number(mission.target_value), verificationMultiplier],
+    );
 
     await connection.query(
       `INSERT INTO Point_transactions (Users_user_number, source, ref_id, base_point, multiplier, amount)

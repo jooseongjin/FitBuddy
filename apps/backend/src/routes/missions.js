@@ -7,7 +7,7 @@ const pool = require('../db');
 const { ApiError } = require('../errors');
 
 const router = express.Router();
-const progressSchema = z.object({ increment: z.number().int().min(1).max(1000) });
+const progressSchema = z.object({ increment: z.literal(1) });
 const toDateKey = (value) => value instanceof Date
   ? new Date(value.getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10)
   : String(value).slice(0, 10);

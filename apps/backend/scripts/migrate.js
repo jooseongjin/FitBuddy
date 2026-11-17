@@ -39,6 +39,17 @@ const mysql = require('mysql2/promise');
   const files = fs.readdirSync(dir).filter((f) => /^\d+_.*\.sql$/.test(f))
     .filter((f) => from === null || parseInt(f, 10) >= from).sort();
   for (const f of files) {
+    if (f === '008_health_daily_metrics.sql') {
+      const [columns] = await conn.query(
+        `SELECT 1 FROM information_schema.COLUMNS
+          WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'User_missions' AND COLUMN_NAME = 'progress_value'`,
+        [dbName],
+      );
+      if (columns.length) {
+        console.log(`[migrate] skipped ${f} (progress_value already exists)`);
+        continue;
+      }
+    }
     let sql = fs.readFileSync(path.join(dir, f), 'utf8');
     if (/DELIMITER/i.test(sql)) {
       // 프로시저 파일: DELIMITER $$ 구문은 클라이언트 명령이므로 제거 후 본문만 실행
