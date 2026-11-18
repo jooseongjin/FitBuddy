@@ -7,11 +7,17 @@ const envInt = (name, fallback) => {
   return Number.isInteger(value) && value >= 0 ? value : fallback;
 };
 const REPAIR_COST = envInt('STREAK_REPAIR_COST', 300);
-const MONTHLY_REPAIR_LIMIT = {
-  basic: envInt('STREAK_REPAIR_MONTHLY_LIMIT_BASIC', 1),
-  premium: envInt('STREAK_REPAIR_MONTHLY_LIMIT_PREMIUM', 3),
+// 월별 복구 한도: 무료 복구와 포인트 복구를 따로 센다 (매월 1일 00:00 KST에 초기화, 이월 없음)
+const REPAIR_LIMITS = {
+  basic: {
+    free: envInt('STREAK_REPAIR_FREE_BASIC', 1),
+    points: envInt('STREAK_REPAIR_POINTS_BASIC', 1),
+  },
+  premium: {
+    free: envInt('STREAK_REPAIR_FREE_PREMIUM', 2),
+    points: envInt('STREAK_REPAIR_POINTS_PREMIUM', 2),
+  },
 };
-const PREMIUM_FREE_REPAIRS = envInt('STREAK_REPAIR_PREMIUM_FREE', 1);
 
 const todayKST = () => new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
 const addDays = (date, days) => new Date(Date.parse(`${date}T00:00:00Z`) + days * DAY_MS).toISOString().slice(0, 10);
@@ -79,11 +85,12 @@ async function getStreak(userNumber, connection = pool, today = todayKST()) {
     [userNumber, monthStart, nextMonthStart, weekStart, today],
   );
   const monthRepairs = repairs.filter((repair) => dateKey(repair.repaired_on) >= monthStart && dateKey(repair.repaired_on) < nextMonthStart);
-  const monthlyRemaining = Math.max(0, MONTHLY_REPAIR_LIMIT[plan] - monthRepairs.length);
+  const limits = REPAIR_LIMITS[plan];
   const freeUsed = monthRepairs.filter((repair) => repair.repair_method === 'free').length;
-  const freeRemaining = plan === 'premium'
-    ? Math.min(monthlyRemaining, Math.max(0, PREMIUM_FREE_REPAIRS - freeUsed))
-    : 0;
+  const pointsUsed = monthRepairs.length - freeUsed;
+  const freeRemaining = Math.max(0, limits.free - freeUsed);
+  const pointsRemaining = Math.max(0, limits.points - pointsUsed);
+  const monthlyRemaining = freeRemaining + pointsRemaining;
 
   let repairStatus = 'none';
   let missedDate = null;
@@ -129,6 +136,9 @@ async function getStreak(userNumber, connection = pool, today = todayKST()) {
       broken_streak: brokenStreak,
       cost: REPAIR_COST,
       free_remaining: freeRemaining,
+      points_remaining: pointsRemaining,
+      free_limit: limits.free,
+      points_limit: limits.points,
       monthly_remaining: monthlyRemaining,
       resets_on: nextMonthStart,
     },
@@ -296,11 +306,14 @@ async function repairStreak(userNumber, request) {
         WHERE Users_user_number = ? AND created_at >= ? AND created_at < ?`,
       [userNumber, monthStart, nextMonthStart],
     );
-    const monthlyLimit = MONTHLY_REPAIR_LIMIT[plan];
-    if (Number(usage.used) >= monthlyLimit) throw new ApiError(409, 'MONTHLY_LIMIT_EXCEEDED', '이번 달 복구 횟수를 모두 사용했습니다.');
-    if (request.method === 'free' && plan !== 'premium') throw new ApiError(403, 'PREMIUM_REQUIRED', '무료 복구는 Premium 사용자만 사용할 수 있습니다.');
-    if (request.method === 'free' && Number(usage.free_used ?? 0) >= PREMIUM_FREE_REPAIRS) {
+    const limits = REPAIR_LIMITS[plan];
+    const freeUsed = Number(usage.free_used ?? 0);
+    const pointsUsed = Number(usage.used) - freeUsed;
+    if (request.method === 'free' && freeUsed >= limits.free) {
       throw new ApiError(409, 'NO_FREE_REPAIR', '이번 달 무료 복구 횟수를 모두 사용했습니다.');
+    }
+    if (request.method === 'points' && pointsUsed >= limits.points) {
+      throw new ApiError(409, 'MONTHLY_LIMIT_EXCEEDED', '이번 달 포인트 복구 횟수를 모두 사용했습니다.');
     }
     const balanceBefore = await getBalance(userNumber, connection);
     if (request.method === 'points' && balanceBefore < REPAIR_COST) {
