@@ -79,7 +79,7 @@ jobs:
           java-version: 17
           cache: gradle
           cache-dependency-path: apps/frontend/android/gradle/wrapper/gradle-wrapper.properties
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@v4.0.4
       - run: npm ci
         working-directory: apps/frontend
       - run: npm run build
