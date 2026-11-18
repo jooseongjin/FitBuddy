@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev, main]
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: fitbuddy
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --host=127.0.0.1 --user=root --password=root"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_USER: root
+      DB_PASSWORD: root
+      DB_NAME: fitbuddy
+      JWT_SECRET: ci-only-secret
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/backend/package-lock.json
+      - run: npm ci
+        working-directory: apps/backend
+      - run: npm run migrate:reset
+        working-directory: apps/backend
+      - run: npm test
+        working-directory: apps/backend
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/frontend/package-lock.json
+      - run: npm ci
+        working-directory: apps/frontend
+      - run: npm test
+        working-directory: apps/frontend
+      - run: npm run lint
+        working-directory: apps/frontend
+      - run: npm run build
+        working-directory: apps/frontend
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/frontend/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
+          cache-dependency-path: apps/frontend/android/gradle/wrapper/gradle-wrapper.properties
+      - uses: android-actions/setup-android@v3
+      - run: npm ci
+        working-directory: apps/frontend
+      - run: npm run build
+        working-directory: apps/frontend
+      - run: npx cap sync android
+        working-directory: apps/frontend
+      - run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - run: bash ./gradlew assembleDebug
+        working-directory: apps/frontend/android

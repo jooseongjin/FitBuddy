@@ -54,8 +54,9 @@ export const CharacterStoreProvider: React.FC<{ children: React.ReactNode }> = (
   const isMock = progressApi.isMock;
   const mockBalance = useSyncExternalStore(subscribeMock, readMockBalance);
   const accountKey = useSyncExternalStore(subscribeMock, readAccountKey, readAccountKey);
-  const [serverBalance, setServerBalance] = useState(INITIAL_FIT_POINT);
-  const fitPoint = isMock ? mockBalance : serverBalance;
+  const [serverBalance, setServerBalance] = useState(() => ({ accountKey, balance: INITIAL_FIT_POINT }));
+  const visibleServerBalance = serverBalance.accountKey === accountKey ? serverBalance.balance : INITIAL_FIT_POINT;
+  const fitPoint = isMock ? mockBalance : visibleServerBalance;
 
   const [saved] = useState(loadSaved);
   const [ownedIds, setOwnedIds] = useState(() => (saved ? new Set(saved.ownedIds) : INITIAL_OWNED_IDS));
@@ -67,10 +68,9 @@ export const CharacterStoreProvider: React.FC<{ children: React.ReactNode }> = (
   useEffect(() => {
     if (isMock) return;
     let cancelled = false;
-    setServerBalance(INITIAL_FIT_POINT);
     progressApi.getBalance().then(
       (balance) => {
-        if (!cancelled) setServerBalance(balance);
+        if (!cancelled) setServerBalance({ accountKey, balance });
       },
       () => {},
     );
@@ -91,10 +91,10 @@ export const CharacterStoreProvider: React.FC<{ children: React.ReactNode }> = (
   // 서버 응답의 잔액 반영. mock은 이미 mock 서버 잔액이 기준이라 값이 다를 때만 맞춤 (/dev/ui 잔액 지정)
   const setFitPoint = useCallback(
     (balance: number) => {
-      if (!isMock) setServerBalance(balance);
+      if (!isMock) setServerBalance({ accountKey, balance });
       else if (mockProgressServer.balance !== balance) mockProgressServer.devSetBalance(balance);
     },
-    [isMock],
+    [accountKey, isMock],
   );
 
   // 상점 구매 차감. 잔액이 부족하면 false, 아무것도 바꾸지 않음. XP·레벨과는 무관
@@ -110,11 +110,11 @@ export const CharacterStoreProvider: React.FC<{ children: React.ReactNode }> = (
         }
       }
       // TODO: API-09 연동 전 — 실제 서버 모드에서도 화면에서만 차감 (서버 잔액과 달라질 수 있음)
-      if (serverBalance < amount) return false;
-      setServerBalance((previous) => previous - amount);
+      if (visibleServerBalance < amount) return false;
+      setServerBalance({ accountKey, balance: visibleServerBalance - amount });
       return true;
     },
-    [isMock, serverBalance],
+    [accountKey, isMock, visibleServerBalance],
   );
 
   /** /dev/ui 초기화: 보유·착용·캐릭터·배경을 처음 상태로 */

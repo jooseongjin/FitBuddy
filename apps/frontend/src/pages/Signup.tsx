@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { isAxiosError } from 'axios';
 import { Link } from 'react-router-dom';
 import { AlertCircle } from 'lucide-react';
 import api from '../api/axios';
@@ -60,8 +61,8 @@ export const Signup: React.FC = () => {
         saveLoginUser(null);
         enterAccount('/');
       }
-    } catch (err: any) {
-      if (err.response?.status === 409) {
+    } catch (err: unknown) {
+      if (isAxiosError(err) && err.response?.status === 409) {
         setErrors({ server: '이미 사용 중인 아이디 또는 이메일입니다.' });
       } else {
         setErrors({ server: '가입 처리 중 오류가 발생했습니다.' });
