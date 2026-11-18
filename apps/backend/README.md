@@ -36,6 +36,11 @@ npm test                    # 통합 테스트 (migrate:reset 후 실행)
 | POST | /streak/repair | Bearer | 어제 기록 복구 및 포인트 원장 차감 |
 | GET | /points/balance | Bearer | 원장 합계 잔액 조회 |
 | GET | /points/history | Bearer | 원장 내역 페이지 조회 |
+| GET | /subscription | Bearer | 내 구독 상태·만료일·최근 결제 기록 조회 |
+| POST | /subscription | Bearer | Premium 구독 (모의 결제). `{ plan: "premium", mock_result?: "success"｜"fail" }`, 실패 시 402 |
+| GET | /rewards | Bearer | 기프티콘 목록 (잠금·품절 여부, `image_key` 포함) |
+| POST | /rewards/:id/redeem | Bearer | 기프티콘 즉시 교환 (포인트 차감·재고 감소·원장 기록) |
+| GET | /rewards/redemptions | Bearer | 내 기프티콘 보관함 |
 | GET | /health/today | Bearer | 오늘 건강 요약 조회 |
 | PUT | /health/today | Bearer | HealthKit/Health Connect 일일 요약 동기화 |
 

@@ -31,6 +31,8 @@ app.use('/api/v1/character', require('./routes/character'));
 app.use('/api/v1/streak', require('./routes/streak'));
 app.use('/api/v1/points', require('./routes/points'));
 app.use('/api/v1/health', require('./routes/health'));
+app.use('/api/v1/subscription', require('./routes/subscription'));
+app.use('/api/v1/rewards', require('./routes/rewards'));
 app.use((req, res) => res.status(404).json({ success: false, code: 'NOT_FOUND', message: '존재하지 않는 경로입니다.' }));
 app.use(errorHandler);
 
