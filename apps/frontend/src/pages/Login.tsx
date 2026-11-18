@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { isAxiosError } from 'axios';
 import { Link } from 'react-router-dom';
 import { Eye, EyeOff, AlertCircle } from 'lucide-react';
 import api from '../api/axios';
@@ -29,8 +30,8 @@ export const Login: React.FC = () => {
       saveLoginUser(res.data.user, userId.includes('@') ? { email: userId } : undefined);
       // 이전 사용자의 잔액·캐릭터 등이 남지 않도록 계정 전환 후 새로 불러와 이동
       enterAccount('/dashboard');
-    } catch (err: any) {
-      if (err.response?.status === 401) {
+    } catch (err: unknown) {
+      if (isAxiosError(err) && err.response?.status === 401) {
         setErrorMsg('아이디 또는 비밀번호를 다시 확인해주세요.');
       } else {
         setErrorMsg('서버와 연결할 수 없습니다. 잠시 후 다시 시도해주세요.');
