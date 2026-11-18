@@ -76,7 +76,7 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 17
+          java-version: 21
           cache: gradle
           cache-dependency-path: apps/frontend/android/gradle/wrapper/gradle-wrapper.properties
       - uses: android-actions/setup-android@v4.0.4
