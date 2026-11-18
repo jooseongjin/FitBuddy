@@ -346,4 +346,4 @@ async function repairStreak(userNumber, request) {
   }
 }
 
-module.exports = { todayKST, getBalance, getCharacter, getStreak, completeMission, repairStreak };
+module.exports = { todayKST, getBalance, getPlan, getCharacter, getStreak, completeMission, repairStreak };

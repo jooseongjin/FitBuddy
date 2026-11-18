@@ -1,3 +1,4 @@
+USE fitbuddy;
 -- 010: 기프티콘 즉시 교환용 Rewards 확장 (실제 기업 연동 없이 예시 이미지로 대체)
 -- 주의: ALTER TABLE 이 포함되어 있어 같은 DB에 두 번 적용하면 실패한다. 배포 DB에는 한 번만 적용한다.
 --   npm run migrate -- --from 10
