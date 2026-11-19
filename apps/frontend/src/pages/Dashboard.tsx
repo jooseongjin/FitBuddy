@@ -82,7 +82,7 @@ export const Dashboard: React.FC = () => {
             <RefreshCw size={14} className={healthSyncing ? 'animate-spin' : ''} />
             {healthSyncing ? '건강 데이터 동기화 중' : health.source ? '건강 데이터 새로고침' : '기기 건강 데이터 연결'}
           </button>
-          <p className="text-center text-[10px] text-gray-400">걸음·활동 칼로리·운동 세션만 읽으며 건강 앱에 기록을 쓰지 않습니다.</p>
+          <p className="text-center text-[10px] text-gray-400">걸음·활동 칼로리·운동 세션만 읽어 미션 인증에 사용하며 건강 앱에 기록을 쓰지 않습니다. 권한은 Health Connect 설정에서 언제든 철회할 수 있습니다. <a href="/privacypolicy.html" className="underline">개인정보 처리방침</a></p>
           {healthError && <p role="status" className="text-center text-[11px] text-gray-500">{healthError}</p>}
         </div>
 

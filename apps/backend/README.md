@@ -81,7 +81,7 @@ Railway 배포에서는 서비스 Root Directory를 `apps/backend`로 지정하�
 
 ## 서버 주소 / CORS
 - 포트 기본값 **4000** (프론트 `apps/frontend/src/api/axios.ts` 의 baseURL)
-- CORS: `localhost`, `127.0.0.1`의 개발 포트와 iOS `capacitor://localhost`를 허용합니다. `CORS_ORIGIN`을 설정하면 프론트 주소와 네이티브 앱 origin을 모두 포함하세요.
+- CORS: `localhost`, `127.0.0.1`의 개발 포트와 iOS `capacitor://localhost`, Android `https://localhost`를 허용합니다. `CORS_ORIGIN`을 설정하면 이 기본 허용 목록은 적용되지 않으므로, 프론트 주소와 함께 `https://localhost`(Android 앱), `capacitor://localhost`(iOS 앱)를 쉼표로 모두 포함하세요.
 
 ## 참고
 - 비밀번호는 bcrypt 해시로만 저장합니다.
