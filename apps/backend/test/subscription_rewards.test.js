@@ -64,7 +64,8 @@ test('구독: 모의 결제 성공 시 Premium 적용, 만료일 설정, 결제 
   assert.equal(r.json.data.payment.pay_status, 'success');
   assert.match(r.json.data.payment.pg_transaction_id, /^MOCK-/);
   const days = (new Date(r.json.data.expires_at) - Date.now()) / 86400000;
-  assert.ok(days > 29 && days <= 30, `만료일 약 30일 뒤여야 함: ${days}`);
+    // DATETIME 초 단위 반올림(MySQL 8.4는 올림)과 요청 처리 시간 때문에 30일을 아주 조금 넘을 수 있다
+  assert.ok(days > 29 && days < 30.01, `만료일 약 30일 뒤여야 함: ${days}`);
 
   const me = await call('/api/v1/subscription', 'GET', null, u.token);
   assert.equal(me.json.data.plan, 'premium');
