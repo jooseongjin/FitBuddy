@@ -39,6 +39,15 @@ test('CORS: iOS Capacitor 출처에서 건강 API 호출 허용', async () => {
   assert.equal(r.status, 204);
   assert.equal(r.headers.get('access-control-allow-origin'), 'capacitor://localhost');
 });
+test('CORS: Android Capacitor 출처(https://localhost)에서 API 호출 허용', async () => {
+  const r = await call('/api/v1/auth/login', 'OPTIONS', null, null, {
+    Origin: 'https://localhost',
+    'Access-Control-Request-Method': 'POST',
+    'Access-Control-Request-Headers': 'content-type',
+  });
+  assert.equal(r.status, 204);
+  assert.equal(r.headers.get('access-control-allow-origin'), 'https://localhost');
+});
 test('signup 성공(201) + Streaks/Characters 생성, 비밀번호 해시 저장', async () => {
   const r = await call('/api/v1/auth/signup', 'POST', body);
   assert.equal(r.status, 201); assert.equal(r.json.success, true);

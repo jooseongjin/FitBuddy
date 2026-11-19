@@ -5,8 +5,9 @@ const { errorHandler } = require('./errors');
 const app = express();
 
 // CORS: 프론트 개발 서버(http://localhost:5173 등)에서 호출할 수 있도록 허용
-// CORS_ORIGIN 을 지정하면 그 주소만, 없으면 localhost / 127.0.0.1 의 모든 포트 허용
-const LOCAL_ORIGIN = /^(http:\/\/(localhost|127\.0\.0\.1)(:\d+)?|capacitor:\/\/localhost)$/;
+// CORS_ORIGIN 을 지정하면 그 주소만, 없으면 localhost / 127.0.0.1 의 모든 포트와
+// 네이티브 앱 origin(iOS capacitor://localhost, Android https://localhost) 허용
+const LOCAL_ORIGIN = /^(http:\/\/(localhost|127\.0\.0\.1)(:\d+)?|capacitor:\/\/localhost|https:\/\/localhost)$/;
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   const allowed = process.env.CORS_ORIGIN
