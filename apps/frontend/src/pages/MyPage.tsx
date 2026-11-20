@@ -3,8 +3,10 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Bell,
   ChevronRight,
+  Crown,
   Flame,
   Gem,
+  Gift,
   Package,
   Palette,
   PawPrint,
@@ -282,7 +284,7 @@ export const MyPage: React.FC = () => {
             <p className="mt-1.5 text-lg font-extrabold text-amber-900 leading-none">
               <AnimatedNumber value={fitPoint} /> <span className="text-xs font-bold">FP</span>
             </p>
-            <p className="mt-1 text-[10px] text-amber-800/70">상점·기록 복구에 쓰는 포인트</p>
+            <p className="mt-1 text-[10px] text-amber-800/70">상점·기록 복구·기프티콘에 쓰는 포인트</p>
           </button>
           <div className="rounded-2xl bg-[#EEF7FF] border border-[#DCEEFF] px-3.5 py-3">
             <p className="flex items-center gap-1.5 text-xs font-bold text-sky-800">
@@ -296,6 +298,41 @@ export const MyPage: React.FC = () => {
             </p>
             <p className="mt-1 text-[10px] text-sky-800/70">미션으로 쌓이고 줄지 않아요</p>
           </div>
+        </section>
+
+        {/* 혜택: 기프티콘 교환 · Premium 구독 */}
+        <section className={`${CARD} divide-y divide-gray-50`} aria-label="혜택">
+          <button
+            type="button"
+            onClick={() => navigate('/rewards')}
+            className="w-full flex items-center gap-2.5 p-4 text-left cursor-pointer hover:bg-gray-50 rounded-t-2xl"
+          >
+            <span className="w-8 h-8 rounded-full bg-violet-100 text-violet-600 flex items-center justify-center shrink-0">
+              <Gift size={ICON_SIZE.title} aria-hidden="true" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-bold text-gray-800">기프티콘 교환</span>
+              <span className="block text-xs text-gray-500 mt-0.5">FitPoint로 상품권 교환 · 보관함</span>
+            </span>
+            <ChevronRight size={16} className="shrink-0 text-gray-400" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate('/mypage/subscription')}
+            className="w-full flex items-center gap-2.5 p-4 text-left cursor-pointer hover:bg-gray-50 rounded-b-2xl"
+          >
+            <span className="w-8 h-8 rounded-full bg-[#F1E9FF] text-violet-700 flex items-center justify-center shrink-0">
+              <Crown size={ICON_SIZE.title} aria-hidden="true" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-bold text-gray-800">구독</span>
+              <span className="block text-xs text-gray-500 mt-0.5">
+                {/* 플랜을 아직 못 불러왔으면 Basic으로 잘못 보이지 않게 */}
+                {!streak ? '구독 상태 확인' : streak.plan === 'premium' ? 'Premium 이용 중' : 'Basic 이용 중 · Premium 알아보기'}
+              </span>
+            </span>
+            <ChevronRight size={16} className="shrink-0 text-gray-400" aria-hidden="true" />
+          </button>
         </section>
 
         {/* 5. 보유 아이템 - 공유 상태의 실제 보유 목록 */}

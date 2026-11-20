@@ -164,6 +164,7 @@ export const DevUiPreview: React.FC = () => {
     brokenStreak: 7,
     cost: MOCK_POLICY.repair.costPoints,
     freeRemaining: 0,
+    pointsRemaining: 1,
     monthlyRemaining: 1,
     resetsOn: nextMonthFirst(today),
     ...patch,
@@ -190,11 +191,13 @@ export const DevUiPreview: React.FC = () => {
   };
 
   const SHEET_PREVIEWS: SheetPreview[] = [
-    { title: 'Basic · FP 복구', plan: 'basic', balance: 2480, repair: {}, submit: 'success' },
-    { title: 'Premium · 무료/FP 선택', plan: 'premium', balance: 2480, repair: { freeRemaining: 1, monthlyRemaining: 3 }, submit: 'success' },
+    { title: 'Basic · 무료/FP 선택', plan: 'basic', balance: 2480, repair: { freeRemaining: 1, pointsRemaining: 1, monthlyRemaining: 2 }, submit: 'success' },
+    { title: 'Basic · 무료 소진 → FP 복구', plan: 'basic', balance: 2480, repair: {}, submit: 'success' },
+    { title: 'Premium · 무료/FP 선택', plan: 'premium', balance: 2480, repair: { freeRemaining: 2, pointsRemaining: 2, monthlyRemaining: 4 }, submit: 'success' },
+    { title: 'FP 복구 횟수 소진 (무료 남음)', plan: 'basic', balance: 2480, repair: { freeRemaining: 1, pointsRemaining: 0, monthlyRemaining: 1 }, submit: 'success' },
     { title: 'FP 부족 (Basic)', plan: 'basic', balance: 120, repair: {}, submit: 'success' },
-    { title: 'FP 부족 (Premium · 무료 남음)', plan: 'premium', balance: 120, repair: { freeRemaining: 1, monthlyRemaining: 2 }, submit: 'success' },
-    { title: '이번 달 횟수 소진', plan: 'basic', balance: 2480, repair: { status: 'monthly_limit', monthlyRemaining: 0 }, submit: 'success' },
+    { title: 'FP 부족 (무료 남음)', plan: 'premium', balance: 120, repair: { freeRemaining: 1, pointsRemaining: 2, monthlyRemaining: 3 }, submit: 'success' },
+    { title: '이번 달 횟수 소진', plan: 'basic', balance: 2480, repair: { status: 'monthly_limit', freeRemaining: 0, pointsRemaining: 0, monthlyRemaining: 0 }, submit: 'success' },
     { title: '복구 불가 (이틀 이상)', plan: 'basic', balance: 2480, repair: { status: 'expired', missedDate: null }, submit: 'success' },
     { title: '처리 중 (8초)', plan: 'basic', balance: 2480, repair: {}, submit: 'slow' },
     { title: '실패 → 다시 시도', plan: 'basic', balance: 2480, repair: {}, submit: 'fail' },

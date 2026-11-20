@@ -33,7 +33,7 @@ export const StreakCard: React.FC<StreakCardProps> = ({ streak, isMock, onOpenRe
       <StreakRepairNotice repair={streak.repair} onOpen={onOpenRepair} />
       {streak.repair.status !== 'available' && (
         <p className="flex items-center gap-1.5 text-[11px] text-gray-400">
-          이번 달 남은 복구 {streak.repair.monthlyRemaining}회
+          이번 달 남은 복구 무료 {streak.repair.freeRemaining}회 · FitPoint {streak.repair.pointsRemaining}회
           <MockTag show={isMock} />
         </p>
       )}

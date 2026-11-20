@@ -14,6 +14,8 @@ import { MyPage } from './pages/MyPage';
 import { PointHistory } from './pages/PointHistory';
 import { ProfileEdit } from './pages/ProfileEdit';
 import { PasswordChange } from './pages/PasswordChange';
+import { Subscription } from './pages/Subscription';
+import { Gifticons } from './pages/Gifticons';
 import { WorkoutReminder } from './components/WorkoutReminder';
 import { CharacterStoreProvider } from './context/CharacterStoreProvider';
 import { ProgressStoreProvider } from './context/ProgressStoreProvider';
@@ -42,6 +44,8 @@ function App() {
           <Route path="/mypage" element={<MyPage />} />
           <Route path="/mypage/profile" element={<ProfileEdit />} />
           <Route path="/mypage/password" element={<PasswordChange />} />
+          <Route path="/mypage/subscription" element={<Subscription />} />
+          <Route path="/rewards" element={<Gifticons />} />
           <Route path="/points" element={<PointHistory />} />
           {DevUiPreview && (
             <Route

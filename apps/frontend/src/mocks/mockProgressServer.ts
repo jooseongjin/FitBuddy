@@ -26,6 +26,16 @@ import {
   type StreakState,
 } from '../api/progressTypes.ts';
 import type { ProgressApi, RepairRequest } from '../api/progressApi.ts';
+import type { BenefitApi } from '../api/benefitApi.ts';
+import type {
+  MockPaymentResult,
+  PaymentLog,
+  RedeemResult,
+  Redemption,
+  RewardList,
+  SubscribeResult,
+  SubscriptionInfo,
+} from '../api/benefitTypes.ts';
 import { MOCK_POLICY } from './mockPolicy.ts';
 import { TODAY_MISSIONS } from '../data/missions.ts';
 
@@ -59,7 +69,25 @@ type MockState = {
   missionLog: Record<DateKey, readonly string[]>;
   /** 날짜별 미션 진행도 (미션 ID → 현재 값). 없으면 미션 데이터의 startProgress */
   missionProgress: Record<DateKey, Readonly<Record<string, number>>>;
+  /** Premium 구독 기간 (모의 결제 성공 시). 없으면 null */
+  subscription: { startedAt: string; expiresAt: string } | null;
+  /** 결제 기록 (오래된 순) */
+  payments: PaymentLog[];
+  /** 기프티콘 재고 (상품 ID → 남은 수량) */
+  rewardStock: Record<string, number>;
+  /** 기프티콘 보관함 (오래된 순) */
+  redemptions: Redemption[];
 };
+
+/** 구독·기프티콘 초기값 (이전 버전 저장값에 없으면 이 값으로 채움) */
+const benefitDefaults = (): Pick<MockState, 'subscription' | 'payments' | 'rewardStock' | 'redemptions'> => ({
+  subscription: null,
+  payments: [],
+  rewardStock: Object.fromEntries(MOCK_POLICY.rewards.map((reward) => [String(reward.id), reward.stock])),
+  redemptions: [],
+});
+
+const withBenefitDefaults = (state: MockState): MockState => ({ ...benefitDefaults(), ...state });
 
 const NO_MISSIONS: readonly string[] = [];
 const NO_PROGRESS: Readonly<Record<string, number>> = {};
@@ -75,7 +103,7 @@ const ERROR_MESSAGE: Record<RepairErrorCode | 'NETWORK_ERROR' | 'IDEMPOTENCY_KEY
   STREAK_NOT_REPAIRABLE: '이틀 이상 지나 기록을 복구할 수 없어요.',
   MISSED_DATE_MISMATCH: '날짜가 바뀌었어요. 화면을 새로 불러올게요.',
   ALREADY_REPAIRED: '이미 복구한 날짜예요.',
-  MONTHLY_LIMIT_EXCEEDED: '이번 달 복구 횟수를 모두 썼어요.',
+  MONTHLY_LIMIT_EXCEEDED: '이번 달 FitPoint 복구 횟수를 모두 썼어요.',
   PREMIUM_REQUIRED: '무료 복구는 Premium 사용자만 쓸 수 있어요.',
   NO_FREE_REPAIR: '무료 복구 횟수가 남아 있지 않아요.',
   REPAIR_COST_UNDEFINED: '복구 비용이 아직 정해지지 않았어요.',
@@ -83,6 +111,16 @@ const ERROR_MESSAGE: Record<RepairErrorCode | 'NETWORK_ERROR' | 'IDEMPOTENCY_KEY
   NETWORK_ERROR: '연결이 불안정해 처리하지 못했어요. 잠시 후 다시 시도해 주세요.',
   IDEMPOTENCY_KEY_REUSED: '요청을 처리하지 못했어요. 다시 시도해 주세요.',
 };
+
+/** 구독·기프티콘 오류 (백엔드 services/subscription.js, rewards.js와 같은 코드·뜻) */
+const BENEFIT_ERROR_MESSAGE = {
+  ALREADY_SUBSCRIBED: '이미 Premium을 구독 중이에요.',
+  PAYMENT_FAILED: '결제에 실패했어요. 구독 상태는 바뀌지 않았어요.',
+  REWARD_NOT_FOUND: '교환할 상품을 찾을 수 없어요.',
+  PREMIUM_REQUIRED: 'Premium 사용자만 교환할 수 있는 상품이에요.',
+  OUT_OF_STOCK: '재고가 모두 소진된 상품이에요.',
+  INSUFFICIENT_POINTS: 'FitPoint가 부족해요.',
+} as const;
 
 const ERROR_KEY = 'NETWORK_ERROR' as const;
 
@@ -128,6 +166,10 @@ const seedLedger = (today: DateKey): PointTransaction[] => {
   return items.map((item, index) => ({ ...item, id: index + 1 }));
 };
 
+/** 모의 결제 거래 ID용 임의 문자열 */
+const createMockId = () =>
+  typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
 const sumLedger = (ledger: PointTransaction[]) => ledger.reduce((sum, item) => sum + item.amount, 0);
 
 const scenarioRecord = (scenario: StreakScenario, today: DateKey, plan: Plan): StreakRecord => {
@@ -146,10 +188,14 @@ const scenarioRecord = (scenario: StreakScenario, today: DateKey, plan: Plan): S
     case 'monthly_used': {
       const last = addDays(today, -2);
       const limit = MOCK_POLICY.repair.monthlyLimit[plan];
-      // 이번 달에 이미 쓴 복구 기록 (과거 날짜를 복구했다고 가정)
-      const repairs = Array.from({ length: limit }, (_, i) => ({
+      // 이번 달에 무료·FitPoint 복구를 모두 쓴 기록 (과거 날짜를 복구했다고 가정)
+      const methods = [
+        ...Array.from({ length: limit.free }, () => 'free' as const),
+        ...Array.from({ length: limit.points }, () => 'points' as const),
+      ];
+      const repairs = methods.map((method, i) => ({
         missedDate: addDays(today, -40 - i),
-        method: 'points' as const,
+        method,
         repairedOn: today,
       }));
       return { currentStreak: 7, lastCompletedDate: last, completedDates: daysEndingAt(last, 7), repairs };
@@ -182,6 +228,7 @@ const initialState = (): MockState => {
     failMode: 'none',
     missionLog: {},
     missionProgress: {},
+    ...benefitDefaults(),
   };
 };
 
@@ -236,7 +283,7 @@ const loadSaved = (accountKey: string | null): Saved | null => {
   }
 };
 
-class MockProgressServer implements ProgressApi {
+class MockProgressServer implements ProgressApi, BenefitApi {
   readonly isMock = true;
 
   private accountKey: string | null;
@@ -247,7 +294,7 @@ class MockProgressServer implements ProgressApi {
   constructor() {
     this.accountKey = this.authenticatedAccountKey();
     const saved = loadSaved(this.accountKey);
-    this.state = saved?.state ?? (this.accountKey ? firstUserState() : initialState());
+    this.state = withBenefitDefaults(saved?.state ?? (this.accountKey ? firstUserState() : initialState()));
     // 시연 중 실수로 남은 실패 모드는 새로고침하면 해제
     this.state = { ...this.state, failMode: 'none' };
     this.idempotency = new Map(saved?.idempotency ?? []);
@@ -265,7 +312,7 @@ class MockProgressServer implements ProgressApi {
     this.persist();
     this.accountKey = nextKey;
     const saved = loadSaved(nextKey);
-    this.state = saved?.state ?? (nextKey ? firstUserState() : initialState());
+    this.state = withBenefitDefaults(saved?.state ?? (nextKey ? firstUserState() : initialState()));
     this.state = { ...this.state, failMode: 'none' };
     this.idempotency = new Map(saved?.idempotency ?? []);
     this.persist();
@@ -378,6 +425,131 @@ class MockProgressServer implements ProgressApi {
       this.persist();
       return result;
     });
+  }
+
+  // ---------- 구독 (실제로는 GET/POST /subscription, 모의 결제) ----------
+  /** 구독 기간이 끝났으면 Basic으로 (백엔드 getPlan과 같은 기준: 만료일이 지나면 Basic) */
+  private expireSubscription() {
+    const sub = this.state.subscription;
+    if (sub && this.state.plan === 'premium' && new Date(sub.expiresAt).getTime() <= this.now().getTime()) {
+      this.setState({ plan: 'basic' });
+    }
+  }
+
+  getSubscription(): Promise<SubscriptionInfo> {
+    return this.respond(() => {
+      this.expireSubscription();
+      const premium = this.state.plan === 'premium';
+      const sub = this.state.subscription;
+      return {
+        plan: this.state.plan,
+        status: sub ? (premium ? 'active' : 'expired') : null,
+        startedAt: sub?.startedAt ?? null,
+        expiresAt: premium ? (sub?.expiresAt ?? null) : null,
+        price: MOCK_POLICY.subscription.price,
+        periodDays: MOCK_POLICY.subscription.periodDays,
+        pointMultiplier: premium ? MOCK_POLICY.premiumMultiplier : 1,
+        payments: [...this.state.payments].reverse().slice(0, 5),
+      };
+    });
+  }
+
+  /** Premium 모의 결제. 이미 Premium이면 ALREADY_SUBSCRIBED, 결제 실패면 기록만 남기고 PAYMENT_FAILED */
+  subscribePremium(mockResult: MockPaymentResult = 'success'): Promise<SubscribeResult> {
+    return this.respond(() => {
+      this.expireSubscription();
+      if (this.state.plan === 'premium') {
+        throw new ApiError('ALREADY_SUBSCRIBED', BENEFIT_ERROR_MESSAGE.ALREADY_SUBSCRIBED);
+      }
+      const now = this.now();
+      const id = (this.state.payments.at(-1)?.id ?? 0) + 1;
+      const ok = mockResult !== 'fail';
+      const payment: PaymentLog = {
+        id,
+        amount: MOCK_POLICY.subscription.price,
+        status: ok ? 'success' : 'failed',
+        transactionId: ok ? `MOCK-${createMockId()}` : null,
+        createdAt: nowKstIso(now),
+      };
+      if (!ok) {
+        this.setState({ payments: [...this.state.payments, payment] });
+        throw new ApiError('PAYMENT_FAILED', BENEFIT_ERROR_MESSAGE.PAYMENT_FAILED);
+      }
+      const expiresAt = nowKstIso(new Date(now.getTime() + MOCK_POLICY.subscription.periodDays * 24 * 60 * 60 * 1000));
+      this.setState({
+        plan: 'premium',
+        subscription: { startedAt: payment.createdAt, expiresAt },
+        payments: [...this.state.payments, payment],
+      });
+      return { plan: 'premium', status: 'active', expiresAt, payment };
+    });
+  }
+
+  // ---------- 기프티콘 (실제로는 GET /rewards, POST /rewards/:id/redeem, GET /rewards/redemptions) ----------
+  getRewards(): Promise<RewardList> {
+    return this.respond(() => {
+      this.expireSubscription();
+      const plan = this.state.plan;
+      return {
+        plan,
+        balance: this.state.balance,
+        items: MOCK_POLICY.rewards.map((reward) => {
+          const stock = this.state.rewardStock[String(reward.id)] ?? reward.stock;
+          return {
+            id: reward.id,
+            name: reward.name,
+            requiredPoint: reward.requiredPoint,
+            stock,
+            premiumOnly: reward.premiumOnly,
+            imageKey: reward.imageKey,
+            soldOut: stock <= 0,
+            locked: reward.premiumOnly && plan !== 'premium',
+          };
+        }),
+      };
+    });
+  }
+
+  /** 즉시 교환: 검증 순서는 백엔드와 같음 (없는 상품 → Premium 전용 → 재고 → 잔액) */
+  redeemReward(rewardId: number): Promise<RedeemResult> {
+    return this.respond(() => {
+      this.expireSubscription();
+      const reward = MOCK_POLICY.rewards.find((item) => item.id === rewardId);
+      if (!reward) throw new ApiError('REWARD_NOT_FOUND', BENEFIT_ERROR_MESSAGE.REWARD_NOT_FOUND);
+      if (reward.premiumOnly && this.state.plan !== 'premium') {
+        throw new ApiError('PREMIUM_REQUIRED', BENEFIT_ERROR_MESSAGE.PREMIUM_REQUIRED);
+      }
+      const stock = this.state.rewardStock[String(reward.id)] ?? reward.stock;
+      if (stock <= 0) throw new ApiError('OUT_OF_STOCK', BENEFIT_ERROR_MESSAGE.OUT_OF_STOCK);
+      if (this.state.balance < reward.requiredPoint) {
+        throw new ApiError('INSUFFICIENT_POINTS', BENEFIT_ERROR_MESSAGE.INSUFFICIENT_POINTS, {
+          required: reward.requiredPoint,
+          balance: this.state.balance,
+        });
+      }
+      const balance = this.addTransaction('reward_redeem', -reward.requiredPoint, reward.name);
+      const summary = { id: reward.id, name: reward.name, requiredPoint: reward.requiredPoint, imageKey: reward.imageKey };
+      const redemption: Redemption = {
+        id: (this.state.redemptions.at(-1)?.id ?? 0) + 1,
+        status: 'completed',
+        redeemedAt: nowKstIso(this.now()),
+        reward: summary,
+      };
+      this.setState({
+        rewardStock: { ...this.state.rewardStock, [String(reward.id)]: stock - 1 },
+        redemptions: [...this.state.redemptions, redemption],
+      });
+      return { redemptionId: redemption.id, status: redemption.status, balance, reward: summary };
+    });
+  }
+
+  getRedemptions(): Promise<Redemption[]> {
+    return this.respond(() => [...this.state.redemptions].reverse());
+  }
+
+  /** /dev/ui: 기프티콘 재고를 0으로 (품절 화면 확인) */
+  devSetRewardStock(rewardId: number, stock: number) {
+    this.setState({ rewardStock: { ...this.state.rewardStock, [String(rewardId)]: stock } });
   }
 
   // ---------- 미션 완료 (실제로는 미션 API: POST /missions/{id}/complete) ----------
@@ -503,8 +675,9 @@ class MockProgressServer implements ProgressApi {
     });
   }
 
+  /** 플랜을 직접 바꿈. Basic으로 바꾸면 구독 기간도 지움 (다시 구독 테스트) */
   devSetPlan(plan: Plan) {
-    this.setState({ plan });
+    this.setState(plan === 'basic' ? { plan, subscription: null } : { plan });
   }
 
   /** 잔액을 직접 지정 (부족·충분 테스트). 차이만큼 내역은 남기지 않음 → 내역 합계와 달라질 수 있음 */

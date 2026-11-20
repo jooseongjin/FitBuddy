@@ -14,7 +14,7 @@ import {
   type StreakRecord,
 } from '../src/domain/streakRules.ts';
 
-const POLICY: RepairPolicy = { costPoints: 300, monthlyLimit: { basic: 1, premium: 3 }, premiumFreePerMonth: 1 };
+const POLICY: RepairPolicy = { costPoints: 300, monthlyLimit: { basic: { free: 1, points: 1 }, premium: { free: 2, points: 2 } } };
 const TODAY = '2026-11-18';
 
 const record = (last: string | null, current: number, extra: Partial<StreakRecord> = {}): StreakRecord => ({
@@ -74,7 +74,10 @@ test('복구 상태: 하루 빠짐=available, 이틀 이상=expired, 이어짐=n
 
 test('이번 달 횟수를 다 쓰면 monthly_limit, 다음 달 1일에 다시 생김', () => {
   const used = record(addDays(TODAY, -2), 7, {
-    repairs: [{ missedDate: '2026-11-03', method: 'points', repairedOn: '2026-11-04' }],
+    repairs: [
+      { missedDate: '2026-11-03', method: 'points', repairedOn: '2026-11-04' },
+      { missedDate: '2026-11-08', method: 'free', repairedOn: '2026-11-09' },
+    ],
   });
   const info = getRepairInfo(used, TODAY, 'basic', POLICY);
   assert.equal(info.status, 'monthly_limit');
@@ -85,11 +88,14 @@ test('이번 달 횟수를 다 쓰면 monthly_limit, 다음 달 1일에 다시 �
   assert.equal(getRepairInfo(sameRecordNextMonth, nextMonth, 'basic', POLICY).status, 'available');
 });
 
-test('복구 검증: FP 부족, Basic 무료 요청, 날짜 불일치, 중복 복구', () => {
+test('복구 검증: FP 부족, 무료 소진, 날짜 불일치, 중복 복구', () => {
   const broken = record(addDays(TODAY, -2), 7);
   const yesterday = addDays(TODAY, -1);
   assert.equal(validateRepair(broken, TODAY, { missedDate: yesterday, method: 'points' }, 'basic', POLICY, 100), 'INSUFFICIENT_POINTS');
-  assert.equal(validateRepair(broken, TODAY, { missedDate: yesterday, method: 'free' }, 'basic', POLICY, 5000), 'PREMIUM_REQUIRED');
+  const freeUsed = record(addDays(TODAY, -2), 7, {
+    repairs: [{ missedDate: '2026-11-02', method: 'free', repairedOn: '2026-11-03' }],
+  });
+  assert.equal(validateRepair(freeUsed, TODAY, { missedDate: yesterday, method: 'free' }, 'basic', POLICY, 5000), 'NO_FREE_REPAIR');
   assert.equal(validateRepair(broken, TODAY, { missedDate: addDays(TODAY, -2), method: 'points' }, 'basic', POLICY, 5000), 'MISSED_DATE_MISMATCH');
   assert.equal(validateRepair(broken, TODAY, { missedDate: yesterday, method: 'free' }, 'premium', POLICY, 0), null);
   const repaired = applyRepair(broken, TODAY, yesterday, 'points');
@@ -117,13 +123,46 @@ test('B9 추천안: 오늘 미션을 먼저 완료하면 어제 복구 불가', 
   assert.equal(getRepairInfo(afterMission, TODAY, 'basic', POLICY).status, 'none');
 });
 
-test('Premium 무료 횟수는 월 한도 안에서만', () => {
+test('무료·FitPoint 복구 횟수는 플랜별로 따로 셈 (백엔드와 같음)', () => {
   const broken = record(addDays(TODAY, -2), 7, {
     repairs: [{ missedDate: '2026-11-02', method: 'free', repairedOn: '2026-11-03' }],
   });
-  const info = getRepairInfo(broken, TODAY, 'premium', POLICY);
-  assert.equal(info.freeRemaining, 0);
-  assert.equal(info.monthlyRemaining, 2);
+  const premium = getRepairInfo(broken, TODAY, 'premium', POLICY);
+  assert.equal(premium.freeRemaining, 1);
+  assert.equal(premium.pointsRemaining, 2);
+  assert.equal(premium.monthlyRemaining, 3);
+  const basic = getRepairInfo(broken, TODAY, 'basic', POLICY);
+  assert.equal(basic.freeRemaining, 0);
+  assert.equal(basic.pointsRemaining, 1);
+  assert.equal(basic.status, 'available');
+});
+
+test('Basic도 무료 복구 가능', () => {
+  const broken = record(addDays(TODAY, -2), 7);
+  const missedDate = addDays(TODAY, -1);
+  assert.equal(getRepairInfo(broken, TODAY, 'basic', POLICY).freeRemaining, 1);
+  assert.equal(validateRepair(broken, TODAY, { missedDate, method: 'free' }, 'basic', POLICY, 0), null);
+});
+
+test('FitPoint 복구 횟수를 다 쓰면 잔액이 있어도 MONTHLY_LIMIT_EXCEEDED, 무료는 가능', () => {
+  const broken = record(addDays(TODAY, -2), 7, {
+    repairs: [{ missedDate: '2026-11-02', method: 'points', repairedOn: '2026-11-03' }],
+  });
+  const missedDate = addDays(TODAY, -1);
+  assert.equal(validateRepair(broken, TODAY, { missedDate, method: 'points' }, 'basic', POLICY, 5000), 'MONTHLY_LIMIT_EXCEEDED');
+  assert.equal(validateRepair(broken, TODAY, { missedDate, method: 'free' }, 'basic', POLICY, 5000), null);
+});
+
+test('무료·FitPoint 모두 쓰면 monthly_limit', () => {
+  const broken = record(addDays(TODAY, -2), 7, {
+    repairs: [
+      { missedDate: '2026-11-02', method: 'points', repairedOn: '2026-11-03' },
+      { missedDate: '2026-11-05', method: 'free', repairedOn: '2026-11-06' },
+    ],
+  });
+  const info = getRepairInfo(broken, TODAY, 'basic', POLICY);
+  assert.equal(info.monthlyRemaining, 0);
+  assert.equal(info.status, 'monthly_limit');
 });
 
 test('위험 배너: 유지 중 + 오늘 미완료 + 20시 이후에만', () => {

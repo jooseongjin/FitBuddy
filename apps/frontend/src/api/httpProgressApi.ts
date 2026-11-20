@@ -59,15 +59,21 @@ const mapTransaction = (raw: Raw): PointTransaction => ({
 /** 응답 본문이 { success, data: ... } 이면 data, 아니면 그대로 */
 const unwrap = (data: Raw): Raw => ((data.data as Raw | undefined) && typeof data.data === 'object' ? (data.data as Raw) : data);
 
-const mapRepair = (raw: Raw): RepairInfo => ({
-  status: (raw.status as RepairInfo['status']) ?? 'none',
-  missedDate: strOrNull(raw.missed_date),
-  brokenStreak: num(raw.broken_streak),
-  cost: numOrNull(raw.cost),
-  freeRemaining: num(raw.free_remaining),
-  monthlyRemaining: num(raw.monthly_remaining),
-  resetsOn: String(raw.resets_on ?? ''),
-});
+const mapRepair = (raw: Raw): RepairInfo => {
+  const freeRemaining = num(raw.free_remaining);
+  const monthlyRemaining = num(raw.monthly_remaining);
+  return {
+    status: (raw.status as RepairInfo['status']) ?? 'none',
+    missedDate: strOrNull(raw.missed_date),
+    brokenStreak: num(raw.broken_streak),
+    cost: numOrNull(raw.cost),
+    freeRemaining,
+    // 백엔드는 무료·포인트 횟수를 따로 줌. 없으면 합계에서 무료를 뺀 값
+    pointsRemaining: num(raw.points_remaining, Math.max(0, monthlyRemaining - freeRemaining)),
+    monthlyRemaining,
+    resetsOn: String(raw.resets_on ?? ''),
+  };
+};
 
 const mapStreak = (raw: Raw): StreakState => ({
   currentStreak: num(raw.current_streak),
@@ -81,6 +87,9 @@ const mapStreak = (raw: Raw): StreakState => ({
     : [],
   serverNow: String(raw.server_now ?? new Date().toISOString()),
 });
+
+/** 이 탭에서 한 번 이상 보낸 복구 요청 ID (재시도 판별용) */
+const sentRepairRequests = new Set<string>();
 
 export const httpProgressApi: ProgressApi = {
   isMock: false,
@@ -111,12 +120,22 @@ export const httpProgressApi: ProgressApi = {
   },
 
   async repairStreak(request: RepairRequest): Promise<RepairResult> {
+    // 같은 요청 ID로 다시 보내는 것(재시도)인지
+    const isRetry = sentRepairRequests.has(request.requestId);
+    sentRepairRequests.add(request.requestId);
     try {
       await api.post<Raw>(
         '/streak/repair',
         { missed_date: request.missedDate, method: request.method },
         { headers: { 'Idempotency-Key': request.requestId } },
       );
+    } catch (error) {
+      const apiError = toApiError(error);
+      // 백엔드는 Idempotency-Key를 쓰지 않음: 첫 요청이 서버에서 성공했는데 응답만 끊겼다면
+      // 재시도는 ALREADY_REPAIRED가 됨 → 이미 복구된 것이므로 성공으로 처리 (같은 날짜는 서버가 한 번만 허용해 FP가 두 번 빠지지 않음)
+      if (!(isRetry && apiError.code === 'ALREADY_REPAIRED')) throw apiError;
+    }
+    try {
       // 응답 형식(8.4)이 일부 필드만 주므로 전체 상태는 다시 조회
       const { data: streak } = await api.get<Raw>('/streak');
       const { data: balance } = await api.get<Raw>('/points/balance');
