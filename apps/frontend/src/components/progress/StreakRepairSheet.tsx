@@ -22,7 +22,8 @@ type Phase = 'idle' | 'submitting' | 'error';
 
 /**
  * Streak 복구 팝업 (UI 12) — 아래에서 올라오는 시트
- * 상태: Basic FP 복구 / Premium 무료·FP 선택 / FP 부족 / 이번 달 횟수 소진 / 복구 불가 / 처리 중 / 실패·재시도
+ * 상태: 무료·FP 선택 / FP 부족 / 방법별 횟수 소진 / 이번 달 횟수 소진 / 복구 불가 / 처리 중 / 실패·재시도
+ * 무료·FitPoint 복구 횟수는 백엔드처럼 따로 센다 (Basic·Premium 모두 무료 복구 있음)
  * - [기록 복구하기] 버튼을 눌렀을 때만 열림 (자동 표시 안 함)
  * - 재시도 때는 같은 요청 ID를 보내 FP가 두 번 빠지지 않게 함
  * - 비용·횟수는 서버 값 (mock이면 "임시 값" 표시)
@@ -39,18 +40,30 @@ export const StreakRepairSheet: React.FC<StreakRepairSheetProps> = ({
   // 복구 성공 직후(닫히기 전) 상태가 'none'으로 바뀌어 다른 문구가 잠깐 보이지 않도록 처음 연 상태를 유지
   const [openedWith] = useState(liveStreak);
   const streak = liveStreak.repair.status === 'none' && openedWith.repair.status !== 'none' ? openedWith : liveStreak;
-  const { repair, plan } = streak;
-  const isPremium = plan === 'premium';
-  const freeAvailable = isPremium && repair.freeRemaining > 0;
+  const { repair } = streak;
+  // 무료 복구는 Basic·Premium 모두 서버가 준 남은 횟수 기준 (백엔드: Basic 월 1회, Premium 월 2회)
+  const freeAvailable = repair.freeRemaining > 0;
   const cost = repair.cost;
-  const pointsAvailable = cost !== null && balance >= cost;
+  // FitPoint 복구는 무료와 따로 횟수를 셈 → 횟수를 다 쓰면 잔액이 있어도 선택 불가
+  const pointsQuotaLeft = repair.pointsRemaining > 0;
+  const enoughPoints = cost !== null && balance >= cost;
+  const pointsAvailable = pointsQuotaLeft && enoughPoints;
   const shortage = cost !== null ? Math.max(0, cost - balance) : 0;
 
-  const [method, setMethod] = useState<RepairMethod>(freeAvailable ? 'free' : 'points');
+  const [chosenMethod, setMethod] = useState<RepairMethod>(freeAvailable ? 'free' : 'points');
+  // 오류 후 새로 불러온 횟수·잔액 때문에 고른 방법을 못 쓰게 되면, 쓸 수 있는 다른 방법으로 자동 전환
+  // (그대로 두면 다른 방법이 남아 있어도 [미션 하러 가기]만 보임)
+  const method: RepairMethod =
+    chosenMethod === 'free' && !freeAvailable && pointsAvailable
+      ? 'points'
+      : chosenMethod === 'points' && !pointsAvailable && freeAvailable
+        ? 'free'
+        : chosenMethod;
   const [phase, setPhase] = useState<Phase>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
   const requestIdRef = useRef<string | null>(null);
+  const requestMethodRef = useRef<RepairMethod | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const submitting = phase === 'submitting';
 
@@ -76,7 +89,10 @@ export const StreakRepairSheet: React.FC<StreakRepairSheetProps> = ({
 
   const submit = async () => {
     if (!repair.missedDate || !canSubmit || submitting) return;
+    // 방법이 자동으로 바뀌었으면 다른 요청이므로 새 요청 ID (같은 방법 재시도만 같은 ID)
+    if (requestMethodRef.current !== method) requestIdRef.current = null;
     requestIdRef.current ??= createRequestId();
+    requestMethodRef.current = method;
     setPhase('submitting');
     setErrorMessage(null);
     try {
@@ -138,18 +154,16 @@ export const StreakRepairSheet: React.FC<StreakRepairSheetProps> = ({
             {/* 복구 방법 */}
             <fieldset className="space-y-2" disabled={submitting}>
               <legend className="mb-1.5 text-xs font-bold text-gray-700">복구 방법</legend>
-              {isPremium && (
-                <MethodOption
-                  selected={method === 'free'}
-                  disabled={!freeAvailable}
-                  onSelect={() => chooseMethod('free')}
-                  icon={<Crown size={16} aria-hidden="true" />}
-                  iconClass="bg-violet-100 text-violet-600"
-                  title="무료 복구"
-                  description={freeAvailable ? `Premium · 이번 달 무료 ${repair.freeRemaining}회 남음` : '이번 달 무료 복구를 모두 썼어요'}
-                  trailing={<MockTag show={isMock} />}
-                />
-              )}
+              <MethodOption
+                selected={method === 'free'}
+                disabled={!freeAvailable}
+                onSelect={() => chooseMethod('free')}
+                icon={<Crown size={16} aria-hidden="true" />}
+                iconClass="bg-violet-100 text-violet-600"
+                title="무료 복구"
+                description={freeAvailable ? `이번 달 무료 ${repair.freeRemaining}회 남음` : '이번 달 무료 복구를 모두 썼어요'}
+                trailing={<MockTag show={isMock} />}
+              />
               <MethodOption
                 selected={method === 'points'}
                 disabled={!pointsAvailable}
@@ -158,13 +172,15 @@ export const StreakRepairSheet: React.FC<StreakRepairSheetProps> = ({
                 iconClass="bg-[#FFE8A8] text-amber-700"
                 title="FitPoint로 복구"
                 description={
-                  cost === null
-                    ? '복구 비용 준비 중'
-                    : pointsAvailable
-                      ? `보유 ${balance.toLocaleString()} FP → 복구 후 ${(balance - cost).toLocaleString()} FP`
-                      : `${shortage.toLocaleString()} FitPoint 부족 · 보유 ${balance.toLocaleString()} FP`
+                  !pointsQuotaLeft
+                    ? '이번 달 FitPoint 복구를 모두 썼어요'
+                    : cost === null
+                      ? '복구 비용 준비 중'
+                      : enoughPoints
+                        ? `보유 ${balance.toLocaleString()} FP → 복구 후 ${(balance - cost).toLocaleString()} FP`
+                        : `${shortage.toLocaleString()} FitPoint 부족 · 보유 ${balance.toLocaleString()} FP`
                 }
-                descriptionClass={!pointsAvailable && cost !== null ? 'text-rose-600 font-bold' : undefined}
+                descriptionClass={pointsQuotaLeft && !enoughPoints && cost !== null ? 'text-rose-600 font-bold' : undefined}
                 trailing={
                   cost !== null && (
                     <span className="flex flex-col items-end gap-0.5">
@@ -177,11 +193,10 @@ export const StreakRepairSheet: React.FC<StreakRepairSheetProps> = ({
                   )
                 }
               />
-              {!isPremium && <p className="px-1 text-[11px] text-gray-400">Premium은 매달 무료 복구를 쓸 수 있어요</p>}
             </fieldset>
 
-            <p className="flex items-center gap-1.5 px-1 text-[11px] text-gray-500">
-              이번 달 남은 복구 <b className="text-gray-700">{repair.monthlyRemaining}회</b>
+            <p className="flex flex-wrap items-center gap-1.5 px-1 text-[11px] text-gray-500">
+              이번 달 남은 복구 <b className="text-gray-700">무료 {repair.freeRemaining}회 · FitPoint {repair.pointsRemaining}회</b>
               <MockTag show={isMock} />
             </p>
 

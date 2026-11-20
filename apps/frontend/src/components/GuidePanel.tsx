@@ -8,7 +8,7 @@ import { MOCK_POLICY } from '../mocks/mockPolicy';
 
 const isMock = progressApi.isMock;
 const repairCost = MOCK_POLICY.repair.costPoints;
-const repairLimit = MOCK_POLICY.repair.monthlyLimit.basic;
+const repairLimit = MOCK_POLICY.repair.monthlyLimit;
 
 type Faq = { q: string; a: React.ReactNode };
 
@@ -52,16 +52,43 @@ const FAQS: Faq[] = [
     a: (
       <>
         <p>어제 하루만 빠졌을 때 복구할 수 있어요. 홈이나 마이페이지의 연속 기록 카드에서 [기록 복구하기]를 누르세요.</p>
-        <p>
-          복구에는 {repairCost !== null && isMock ? `${repairCost.toLocaleString()} FP` : 'FitPoint'}가 들고, 한 달에 {isMock ? `${repairLimit}번` : '정해진 횟수만큼'}까지 할 수 있어요.
-          {isMock && ' (임시 값)'}
-        </p>
+        <p>복구 방법은 두 가지예요. 매달 <b>무료 복구</b>와 <b>FitPoint 복구</b> 횟수가 따로 생겨요.</p>
+        <ul className="list-disc pl-4 space-y-0.5">
+          <li>
+            무료 복구: FitPoint 없이 복구해요.
+            {isMock && ` Basic 월 ${repairLimit.basic.free}회, Premium 월 ${repairLimit.premium.free}회`}
+          </li>
+          <li>
+            FitPoint 복구: {repairCost !== null && isMock ? `${repairCost.toLocaleString()} FP` : 'FitPoint'}를 써서 복구해요.
+            {isMock && ` Basic 월 ${repairLimit.basic.points}회, Premium 월 ${repairLimit.premium.points}회`}
+          </li>
+        </ul>
+        {isMock && <p className="text-gray-400">(임시 값)</p>}
+        {!isMock && <p>남은 횟수는 복구 화면에서 확인할 수 있어요.</p>}
         <ul className="list-disc pl-4 space-y-0.5">
           <li>오늘 미션 보상을 받기 전에만 복구할 수 있어요.</li>
           <li>이틀 이상 빠졌으면 복구할 수 없어요. 오늘 미션을 완료하면 1일부터 다시 시작해요.</li>
           <li>이번 달 횟수를 다 쓰면 다음 달 1일에 다시 생겨요.</li>
           <li>복구는 연속 일수를 지켜 주는 기능이에요. +1일은 오늘 미션을 완료해야 돼요.</li>
         </ul>
+      </>
+    ),
+  },
+  {
+    q: '기프티콘은 어떻게 교환하나요?',
+    a: (
+      <>
+        <p>마이페이지의 [기프티콘 교환]에서 상품을 고르고 FitPoint로 교환해요. 교환한 기프티콘은 보관함에서 볼 수 있어요.</p>
+        <p>교환하면 취소할 수 없어요. 지금 보이는 이미지는 시연용 예시라 실제 상품권으로 쓸 수 없어요.</p>
+      </>
+    ),
+  },
+  {
+    q: 'Premium 구독은 무엇이 다른가요?',
+    a: (
+      <>
+        <p>Premium은 미션 FitPoint를 1.5배로 받고, 연속 기록 복구 횟수가 2배예요.</p>
+        <p>지금은 모의 결제라 실제로 돈이 나가지 않아요. 구독 해지 기능은 아직 없어, 시작하면 이용 기간 동안 Premium이 유지돼요.</p>
       </>
     ),
   },

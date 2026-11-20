@@ -19,7 +19,7 @@ const SOURCE_INFO: Record<PointSource, { label: string; icon: React.ReactNode; i
   mission_complete: { label: '미션 완료', icon: <Target size={16} aria-hidden="true" />, iconClass: 'bg-[#DDF3E8] text-[#2F8A5B]' },
   shop_purchase: { label: '상점 구매', icon: <ShoppingBag size={16} aria-hidden="true" />, iconClass: 'bg-[#FFE8A8] text-amber-700' },
   streak_repair: { label: '연속 기록 복구', icon: <RotateCcw size={16} aria-hidden="true" />, iconClass: 'bg-[#DCEEFF] text-sky-700' },
-  reward_redeem: { label: '리워드 교환', icon: <Gift size={16} aria-hidden="true" />, iconClass: 'bg-violet-100 text-violet-600' },
+  reward_redeem: { label: '기프티콘 교환', icon: <Gift size={16} aria-hidden="true" />, iconClass: 'bg-violet-100 text-violet-600' },
 };
 
 /** 거래 시각(ISO) → KST 날짜·시각 */

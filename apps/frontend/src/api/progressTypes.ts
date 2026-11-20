@@ -26,9 +26,11 @@ export type RepairInfo = {
   brokenStreak: number;
   /** FP 복구 비용. 백엔드 결정값(B7) — 아직 미정 */
   cost: number | null;
-  /** Premium 무료 복구 남은 횟수 (Basic은 0) — B8 미정 */
+  /** 이번 달 무료 복구 남은 횟수 (Basic·Premium 모두. 백엔드: Basic 1회, Premium 2회) */
   freeRemaining: number;
-  /** 이번 달 남은 복구 횟수 — B8 미정 */
+  /** 이번 달 FitPoint 복구 남은 횟수 (무료와 따로 셈. 백엔드: Basic 1회, Premium 2회) */
+  pointsRemaining: number;
+  /** 이번 달 남은 복구 횟수 합계 (= 무료 + FitPoint) */
   monthlyRemaining: number;
   /** 다음 횟수 초기화일 (매월 1일 KST) */
   resetsOn: DateKey;

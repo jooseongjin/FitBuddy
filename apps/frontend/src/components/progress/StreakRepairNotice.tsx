@@ -19,7 +19,7 @@ export const StreakRepairNotice: React.FC<{ repair: RepairInfo; onOpen: () => vo
           어제 기록을 복구할 수 있어요
         </p>
         <p className="text-[11px] text-gray-600">
-          {repair.brokenStreak}일 연속 기록을 지킬 수 있어요 · 이번 달 남은 복구 {repair.monthlyRemaining}회
+          {repair.brokenStreak}일 연속 기록을 지킬 수 있어요 · 남은 복구 무료 {repair.freeRemaining}회 · FitPoint {repair.pointsRemaining}회
         </p>
         <button
           type="button"

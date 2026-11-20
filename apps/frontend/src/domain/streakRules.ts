@@ -15,11 +15,13 @@ export type StreakRecord = {
   repairs: RepairRecord[];
 };
 
-/** 복구 정책 — 값은 백엔드 결정(B7·B8). 프론트에서는 mock 설정으로만 주입 */
+/**
+ * 복구 정책 — 값은 백엔드 결정. 프론트에서는 mock 설정으로만 주입
+ * 백엔드(services/progress.js)와 같이 무료 복구·FitPoint 복구 횟수를 플랜별로 따로 센다.
+ */
 export type RepairPolicy = {
   costPoints: number | null;
-  monthlyLimit: Record<Plan, number>;
-  premiumFreePerMonth: number;
+  monthlyLimit: Record<Plan, { free: number; points: number }>;
 };
 
 export type StreakUpdate = { increased: boolean; previous: number; current: number; restarted: boolean };
@@ -77,16 +79,19 @@ export const getRepairInfo = (
   policy: RepairPolicy,
 ): RepairInfo => {
   const used = repairsThisMonth(record, today);
-  const monthlyRemaining = Math.max(0, policy.monthlyLimit[plan] - used.length);
+  const limit = policy.monthlyLimit[plan];
   const freeUsed = used.filter((repair) => repair.method === 'free').length;
-  const freeRemaining =
-    plan === 'premium' ? Math.min(monthlyRemaining, Math.max(0, policy.premiumFreePerMonth - freeUsed)) : 0;
+  const pointsUsed = used.length - freeUsed;
+  const freeRemaining = Math.max(0, limit.free - freeUsed);
+  const pointsRemaining = Math.max(0, limit.points - pointsUsed);
+  const monthlyRemaining = freeRemaining + pointsRemaining;
   const base: RepairInfo = {
     status: 'none',
     missedDate: null,
     brokenStreak: 0,
     cost: policy.costPoints,
     freeRemaining,
+    pointsRemaining,
     monthlyRemaining,
     resetsOn: nextMonthFirst(today),
   };
@@ -130,12 +135,12 @@ export const validateRepair = (
   if (request.missedDate !== addDays(today, -1)) return 'MISSED_DATE_MISMATCH';
   if (record.repairs.some((repair) => repair.missedDate === request.missedDate)) return 'ALREADY_REPAIRED';
   const info = getRepairInfo(record, today, plan, policy);
-  if (info.monthlyRemaining <= 0) return 'MONTHLY_LIMIT_EXCEEDED';
+  // 백엔드와 같은 순서: 방법별 남은 횟수 → 잔액
   if (request.method === 'free') {
-    if (plan !== 'premium') return 'PREMIUM_REQUIRED';
     if (info.freeRemaining <= 0) return 'NO_FREE_REPAIR';
     return null;
   }
+  if (info.pointsRemaining <= 0) return 'MONTHLY_LIMIT_EXCEEDED';
   if (policy.costPoints === null) return 'REPAIR_COST_UNDEFINED';
   if (balance < policy.costPoints) return 'INSUFFICIENT_POINTS';
   return null;
