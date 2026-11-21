@@ -1,3 +1,17 @@
+const db = require('./db');
+
+const MAX_LEVEL = 20;
+const LEVEL_XP_TABLE = Array.from({ length: MAX_LEVEL }, (_, i) => 50 * i * (i + 1));
+
+function levelFromXp(totalXp, fallbackLevel = 1) {
+  const xp = Number(totalXp) || 0;
+  let level = 1;
+  for (let i = 0; i < LEVEL_XP_TABLE.length; i += 1) {
+    if (xp >= LEVEL_XP_TABLE[i]) level = i + 1;
+  }
+  return Math.max(level, Number(fallbackLevel) || 1);
+}
+
 // controllers/missionController.js
 const completeMission = async (req, res) => {
   const userNumber = req.user.user_number;
@@ -10,7 +24,7 @@ const completeMission = async (req, res) => {
 
     // 2. 조건부 UPDATE로 중복 미션 완료 방지 (NFR-02)
     const [updateResult] = await connection.query(
-      `UPDATE User_missions 
+      `UPDATE User_missions
        SET mission_status = 'completed', completed_at = NOW()
        WHERE user_mission_id = ? AND Users_user_number = ? AND mission_status = 'assigned'`,
       [userMissionId, userNumber]
@@ -48,12 +62,18 @@ const completeMission = async (req, res) => {
       [userNumber, userMissionId, basePoint, multiplier, earnedAmount]
     );
 
-    // 5. 캐릭터 total_earned_xp (누적 경험치) 증가 (ADR-04)
+    // 5. 캐릭터 total_earned_xp 및 level 동기화 (ADR-04)
+    const [[characterRow]] = await connection.query(
+      'SELECT level, total_earned_xp FROM Characters WHERE Users_user_number = ? FOR UPDATE',
+      [userNumber]
+    );
+    const beforeLevel = Number(characterRow?.level) || 1;
+    const nextTotalXp = (Number(characterRow?.total_earned_xp) || 0) + earnedAmount;
+    const afterLevel = levelFromXp(nextTotalXp, beforeLevel);
+
     await connection.query(
-      `UPDATE Characters 
-       SET total_earned_xp = total_earned_xp + ?
-       WHERE Users_user_number = ?`,
-      [earnedAmount, userNumber]
+      'UPDATE Characters SET total_earned_xp = ?, level = ? WHERE Users_user_number = ?',
+      [nextTotalXp, afterLevel, userNumber]
     );
 
     // 6. 트랜잭션 커밋
@@ -64,6 +84,9 @@ const completeMission = async (req, res) => {
       message: '미션 완료 처리되었습니다.',
       data: {
         earned_point: earnedAmount,
+        earned_xp: earnedAmount,
+        total_earned_xp: nextTotalXp,
+        level: { before: beforeLevel, after: afterLevel },
         multiplier: multiplier
       }
     });
@@ -76,3 +99,5 @@ const completeMission = async (req, res) => {
     connection.release();
   }
 };
+
+module.exports = { completeMission };
