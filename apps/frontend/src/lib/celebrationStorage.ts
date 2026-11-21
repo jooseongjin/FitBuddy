@@ -8,14 +8,20 @@ let memoryValue: number | null = null;
 
 // mock 모드는 레벨·XP가 탭 단위로 초기화되므로 축하 기록도 탭 단위(sessionStorage)로 맞춘다
 // (브라우저에 계속 남기면 새 탭에서 Lv.8로 다시 시작해도 Lv.9 축하가 '이미 본 것'으로 처리돼 안 뜸)
-// 실제 서버 모드(VITE_PROGRESS_API=http)는 레벨이 서버에 남으므로 브라우저(localStorage)에 계속 저장
-const isMockMode = (import.meta as { env?: Record<string, string> }).env?.VITE_PROGRESS_API !== 'http';
+// 실제 서버 모드(기본값)는 레벨이 서버에 남으므로 브라우저(localStorage)에 계속 저장
+// progressClient와 같은 기준: VITE_PROGRESS_API=mock 일 때만 mock (값이 없으면 실제 서버)
+const isMockMode = (import.meta as { env?: Record<string, string> }).env?.VITE_PROGRESS_API === 'mock';
 const store = (): Storage => (isMockMode ? sessionStorage : localStorage);
 
-/** 로그인 사용자 구분값. 아직 사용자 ID를 저장하지 않아 기본값 사용 (로그인 연동 시 교체) */
+/**
+ * 로그인 사용자 구분값: 로그인 응답으로 저장한 계정 번호(user_number)
+ * 같은 브라우저에서 계정을 바꿔도 다른 계정의 축하 기록과 섞이지 않게 계정별로 저장
+ * 로그인 정보가 없으면(시연·비로그인) 'me'
+ */
 export const currentUserKey = (): string => {
   try {
-    return localStorage.getItem('userId') ?? 'me';
+    const session = JSON.parse(localStorage.getItem('fb.session.user') ?? 'null') as { user_number?: unknown } | null;
+    return typeof session?.user_number === 'number' && session.user_number > 0 ? `u${session.user_number}` : 'me';
   } catch {
     return 'me';
   }
