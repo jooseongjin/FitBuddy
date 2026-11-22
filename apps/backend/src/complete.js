@@ -1,78 +1,129 @@
-// controllers/missionController.js
-const completeMission = async (req, res) => {
-  const userNumber = req.user.user_number;
-  const userMissionId = req.params.id; // user_mission_id
+const express = require("express");
+const router = express.Router();
+const db = require("./db");
 
-  const connection = await db.getConnection();
+function calculateLevel(totalXp) {
+  const safeXp = Math.max(0, Number(totalXp) || 0);
+  return Math.floor(Math.sqrt(safeXp / 100)) + 1;
+}
+
+function getPointMultiplier(isPremium) {
+  return isPremium ? 1.5 : 1.0;
+}
+
+router.post("/complete", async (req, res) => {
+  const { userId, missionId, completedAt } = req.body;
+
+  if (!userId || !missionId) {
+    return res.status(400).json({
+      ok: false,
+      message: "userId and missionId are required.",
+    });
+  }
+
+  let conn;
   try {
-    // 1. 트랜잭션 시작 (NFR-01)
-    await connection.beginTransaction();
+    conn = await db.getConnection();
+    await conn.beginTransaction();
 
-    // 2. 조건부 UPDATE로 중복 미션 완료 방지 (NFR-02)
-    const [updateResult] = await connection.query(
-      `UPDATE User_missions 
-       SET mission_status = 'completed', completed_at = NOW()
-       WHERE user_mission_id = ? AND Users_user_number = ? AND mission_status = 'assigned'`,
-      [userMissionId, userNumber]
+    const [users] = await conn.query(
+      `SELECT id, fit_point, total_earned_xp, level, streak_days, last_completed_date, is_premium
+       FROM users
+       WHERE id = ? FOR UPDATE`,
+      [userId]
     );
 
-    if (updateResult.affectedRows === 0) {
-      await connection.rollback();
-      return res.status(409).json({ message: '이미 완료되었거나 배정되지 않은 미션입니다.' });
+    if (!users || users.length === 0) {
+      await conn.rollback();
+      return res.status(404).json({ ok: false, message: "User not found." });
     }
 
-    // 3. 미션 기본 포인트 및 사용자 구독 플랜 조회 (SEC-03)
-    const [[missionInfo]] = await connection.query(
-      `SELECT m.base_point, m.Missions_id
-       FROM User_missions um
-       JOIN Missions m ON um.Missions_id = m.Missions_id
-       WHERE um.user_mission_id = ?`,
-      [userMissionId]
+    const [missions] = await conn.query(
+      `SELECT id, reward_points, reward_xp
+       FROM missions
+       WHERE id = ?`,
+      [missionId]
     );
 
-    const [[subscription]] = await connection.query(
-      `SELECT plan, sub_status, expires_at FROM Subscriptions WHERE Users_user_number = ?`,
-      [userNumber]
+    if (!missions || missions.length === 0) {
+      await conn.rollback();
+      return res.status(404).json({ ok: false, message: "Mission not found." });
+    }
+
+    const user = users[0];
+    const mission = missions[0];
+
+    const basePoints = Number(mission.reward_points) || 0;
+    const baseXp = Number(mission.reward_xp) || 0;
+    const multiplier = getPointMultiplier(Boolean(user.is_premium));
+    const earnedPoints = Math.round(basePoints * multiplier);
+
+    const prevXp = Number(user.total_earned_xp) || 0;
+    const nextXp = prevXp + baseXp;
+    const prevLevel = Number(user.level) || calculateLevel(prevXp);
+    const nextLevel = calculateLevel(nextXp);
+    const nextPoints = (Number(user.fit_point) || 0) + earnedPoints;
+
+    const targetDate = completedAt
+      ? new Date(completedAt).toISOString().slice(0, 10)
+      : new Date().toISOString().slice(0, 10);
+
+    let nextStreak = Number(user.streak_days) || 0;
+    if (user.last_completed_date !== targetDate) {
+      nextStreak += 1;
+    }
+
+    await conn.query(
+      `UPDATE users
+       SET fit_point = ?,
+           total_earned_xp = ?,
+           level = ?,
+           streak_days = ?,
+           last_completed_date = ?
+       WHERE id = ?`,
+      [nextPoints, nextXp, nextLevel, nextStreak, targetDate, userId]
     );
 
-    // 구독 플랜에 따른 배율 결정
-    const isPremium = subscription && subscription.plan === 'premium' && new Date(subscription.expires_at) > new Date();
-    const multiplier = isPremium ? 1.5 : 1.0;
-    const basePoint = missionInfo.base_point;
-    const earnedAmount = Math.floor(basePoint * multiplier);
-
-    // 4. Point_transactions 원장에 적립 기록 INSERT (NFR-05)
-    await connection.query(
-      `INSERT INTO Point_transactions (Users_user_number, source, ref_id, base_point, multiplier, amount, created_at)
-       VALUES (?, 'mission_complete', ?, ?, ?, ?, NOW())`,
-      [userNumber, userMissionId, basePoint, multiplier, earnedAmount]
+    await conn.query(
+      `INSERT INTO mission_completions (user_id, mission_id, earned_points, earned_xp, completed_date)
+       VALUES (?, ?, ?, ?, ?)`,
+      [userId, missionId, earnedPoints, baseXp, targetDate]
     );
 
-    // 5. 캐릭터 total_earned_xp (누적 경험치) 증가 (ADR-04)
-    await connection.query(
-      `UPDATE Characters 
-       SET total_earned_xp = total_earned_xp + ?
-       WHERE Users_user_number = ?`,
-      [earnedAmount, userNumber]
-    );
-
-    // 6. 트랜잭션 커밋
-    await connection.commit();
+    await conn.commit();
 
     return res.status(200).json({
-      success: true,
-      message: '미션 완료 처리되었습니다.',
+      ok: true,
       data: {
-        earned_point: earnedAmount,
-        multiplier: multiplier
-      }
+        userId,
+        missionId,
+        earnedPoints,
+        earnedXp: baseXp,
+        multiplier,
+        fitPoint: nextPoints,
+        totalEarnedXp: nextXp,
+        previousLevel: prevLevel,
+        level: nextLevel,
+        leveledUp: nextLevel > prevLevel,
+        streakDays: nextStreak,
+      },
     });
-
-  } catch (error) {
-    await connection.rollback();
-    console.error('Complete Mission Error:', error);
-    return res.status(500).json({ message: '미션 완료 처리 중 오류가 발생했습니다.' });
+  } catch (err) {
+    if (conn) {
+      try {
+        await conn.rollback();
+      } catch (_) {}
+    }
+    console.error("[complete.js] transaction error:", err);
+    return res.status(500).json({
+      ok: false,
+      message: "Failed to complete mission.",
+    });
   } finally {
-    connection.release();
+    if (conn) {
+      conn.release();
+    }
   }
-};
+});
+
+module.exports = router;
