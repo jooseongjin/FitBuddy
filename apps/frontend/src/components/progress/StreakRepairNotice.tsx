@@ -16,7 +16,7 @@ export const StreakRepairNotice: React.FC<{ repair: RepairInfo; onOpen: () => vo
       <div className="rounded-xl bg-[#DCEEFF] px-3 py-3 space-y-2">
         <p className="flex items-center gap-1.5 text-[13px] font-bold text-sky-800">
           <RotateCcw size={15} aria-hidden="true" />
-          어제 기록을 복구할 수 있어요
+          놓친 기록을 복구할 수 있어요
         </p>
         <p className="text-[11px] text-gray-600">
           {repair.brokenStreak}일 연속 기록을 지킬 수 있어요 · 남은 복구 무료 {repair.freeRemaining}회 · FitPoint {repair.pointsRemaining}회

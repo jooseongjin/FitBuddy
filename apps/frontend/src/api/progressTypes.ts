@@ -20,7 +20,7 @@ export type Plan = 'basic' | 'premium';
 
 export type RepairInfo = {
   status: RepairStatus;
-  /** 복구 대상 날짜 (어제) */
+  /** 복구 대상 날짜 (최근 3일 안에 놓친 하루) */
   missedDate: DateKey | null;
   /** 복구하면 유지되는 연속 일수 */
   brokenStreak: number;
