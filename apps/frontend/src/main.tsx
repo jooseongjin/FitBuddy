@@ -4,6 +4,10 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
+import { setupNativeBackButton } from './lib/nativeBackButton'
+
+// Android 뒤로가기: 이전 화면으로 이동 (시작 화면에서만 종료)
+setupNativeBackButton()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
