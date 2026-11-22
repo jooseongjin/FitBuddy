@@ -1,8 +1,22 @@
-import React, { useMemo } from 'react';
-import { Bell, Flame, Gem, Menu, Package, PawPrint, User, UserPen } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import {
+  Bell,
+  ChevronRight,
+  Crown,
+  Flame,
+  Gem,
+  Gift,
+  Package,
+  Palette,
+  PawPrint,
+  RefreshCw,
+  Sparkles,
+  UserPen,
+} from 'lucide-react';
 import { BottomNav } from '../components/BottomNav';
+import { CharacterAvatar } from '../components/CharacterAvatar';
 import { CharacterStage } from '../components/CharacterStage';
-import { FitPointChip } from '../components/FitPointChip';
 import { CATEGORY_ICON, ICON_SIZE } from '../components/categoryIcons';
 import {
   BACKGROUND_ITEMS,
@@ -14,15 +28,26 @@ import {
   type PartCategory,
 } from '../data/characterItems';
 import { useCharacterStore } from '../context/characterStore';
+import { useProgress } from '../context/progressStore';
+import { LevelCard } from '../components/progress/LevelCard';
+import { StreakCard } from '../components/progress/StreakCard';
+import { StreakRepairSheet } from '../components/progress/StreakRepairSheet';
+import { Toast } from '../components/progress/Toast';
+import { AnimatedNumber } from '../components/progress/AnimatedNumber';
+import { TIME_OPTIONS, displayName, goalTitle, readProfile } from '../lib/profileStorage';
+import { PageHeaderActions } from '../components/PageHeaderActions';
+import {
+  REMINDER_TIMES,
+  readReminder,
+  reminderPermission,
+  requestReminderPermission,
+  showWorkoutNotification,
+  subscribeReminder,
+  writeReminder,
+} from '../lib/reminderSettings';
 
-// TODO: 사용자 정보 API 연동 전 mock 값 (홈/미션 화면에 표시되는 값과 동일)
-// FitPoint는 상점과 공유하는 캐릭터 저장소에서 읽음
-const MOCK_PROFILE = {
-  nickname: '사용자님',
-  characterName: '두리',
-  level: 'LEVEL 08',
-  streakDays: 7,
-};
+// 닉네임·운동 목표는 프로필 수정 화면에서 저장한 값 (프로필 API 연동 전까지 브라우저 저장)
+// FitPoint는 상점과 공유하는 캐릭터 저장소에서, 레벨·XP·Streak은 progress 저장소에서 읽음
 
 const PART_LABEL: Record<PartCategory, string> = { head: '머리', clothes: '의상', acc: '액세서리' };
 const PART_ORDER: PartCategory[] = ['head', 'clothes', 'acc'];
@@ -30,9 +55,65 @@ const PART_ORDER: PartCategory[] = ['head', 'clothes', 'acc'];
 // 공통 카드: 흰색 + 둥근 모서리 + 얇은 테두리
 const CARD = 'bg-white rounded-2xl border border-gray-100 shadow-sm';
 
+/** 불러오는 중 자리 표시 (레이아웃이 흔들리지 않도록 실제 카드와 비슷한 높이) */
+const Skeleton: React.FC<{ className: string }> = ({ className }) => (
+  <div className={`rounded-2xl bg-white/70 border border-gray-100 animate-pulse ${className}`} aria-hidden="true" />
+);
+
 export const MyPage: React.FC = () => {
+  const navigate = useNavigate();
   // 상점에서 바꾼 FitPoint/보유/착용/배경 상태를 그대로 표시
   const { fitPoint, ownedIds, currentCharacterId, equippedByCharacter, backgroundId } = useCharacterStore();
+  const {
+    character: progress,
+    streak,
+    status,
+    errorMessage,
+    isMock,
+    refresh,
+    repairStreak,
+    checkCelebrationOnEntry,
+  } = useProgress();
+
+  const location = useLocation();
+  const [profile] = useState(readProfile);
+  const nickname = displayName(profile.nickname);
+  const minutesTitle = TIME_OPTIONS.find((option) => option.id === profile.minutes)?.title ?? '';
+
+  const [repairOpen, setRepairOpen] = useState(false);
+  // 프로필 저장 후 돌아오면 안내 토스트 (navigate state)
+  const [toast, setToast] = useState<{ message: string; seq: number } | null>(() => {
+    const message = (location.state as { toast?: string } | null)?.toast;
+    return message ? { message, seq: 1 } : null;
+  });
+  // 토스트를 한 번 보여준 뒤 뒤로 가기·새로고침에서 다시 뜨지 않도록 history state 비움
+  useEffect(() => {
+    if ((location.state as { toast?: string } | null)?.toast) navigate(location.pathname, { replace: true, state: null });
+  }, [location.pathname, location.state, navigate]);
+
+  // 운동 알림
+  const reminder = useSyncExternalStore(subscribeReminder, readReminder);
+  const [permission, setPermission] = useState(reminderPermission);
+  const [reminderNote, setReminderNote] = useState<string | null>(null);
+  const toggleReminder = async () => {
+    if (reminder.enabled) {
+      writeReminder({ ...reminder, enabled: false });
+      setReminderNote(null);
+      return;
+    }
+    const result = await requestReminderPermission();
+    setPermission(result);
+    if (result === 'granted') {
+      writeReminder({ ...reminder, enabled: true });
+      setReminderNote(`매일 ${reminder.time}에 알려드릴게요. 앱이 열려 있을 때 알림이 와요.`);
+    } else if (result === 'denied') {
+      setReminderNote('브라우저 알림이 차단돼 있어요. 주소창 왼쪽 사이트 설정에서 알림을 허용해 주세요.');
+    } else if (result === 'unsupported') {
+      setReminderNote('이 브라우저는 알림을 지원하지 않아요.');
+    } else {
+      setReminderNote('알림 권한을 허용해야 켤 수 있어요.');
+    }
+  };
 
   const character = findCharacter(currentCharacterId);
   const equippedIds = equippedByCharacter[currentCharacterId] ?? EMPTY_EQUIPPED;
@@ -41,6 +122,14 @@ export const MyPage: React.FC = () => {
     () => getEquippedParts(character, equippedIds),
     [character, equippedIds],
   );
+
+  // 레벨업 축하: 마이페이지 진입마다 한 번만 판단 (첫 진입이면 표시 없이 현재 레벨만 기억 — 설계서 5.4)
+  const entryChecked = useRef(false);
+  useEffect(() => {
+    if (entryChecked.current || !progress) return;
+    entryChecked.current = true;
+    checkCelebrationOnEntry();
+  }, [progress, checkCelebrationOnEntry]);
 
   // 파츠별 착용/미착용 요약
   const equippedSummary = PART_ORDER.map((category) => ({
@@ -64,57 +153,90 @@ export const MyPage: React.FC = () => {
     })),
   ];
 
+  const goMissions = useCallback(() => navigate('/missions'), [navigate]);
+  const closeRepair = useCallback(() => setRepairOpen(false), []);
+  const closeToast = useCallback(() => setToast(null), []);
+  const handleRepaired = useCallback((keptDays: number) => {
+    setRepairOpen(false);
+    setToast((previous) => ({ message: `${keptDays}일 연속 기록을 지켰어요!`, seq: (previous?.seq ?? 0) + 1 }));
+  }, []);
+
   return (
     <div className="min-h-screen bg-[#F8F5EC] pb-24 max-w-md mx-auto shadow-md">
       {/* 상단 헤더 - 보유 FitPoint 노출 */}
-      <div className="bg-white sticky top-0 z-10 shadow-sm">
-        <div className="px-4 py-3 border-b border-gray-100 flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <span className="w-9 h-9 flex items-center justify-center text-gray-700">
-              <Menu size={ICON_SIZE.nav} aria-hidden="true" />
-            </span>
-            <div>
-              <h1 className="text-base font-bold text-gray-800">마이페이지</h1>
-              <FitPointChip amount={fitPoint} />
-            </div>
-          </div>
-          <span className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-gray-500">
-            <User size={ICON_SIZE.nav} aria-hidden="true" />
-          </span>
-        </div>
-      </div>
+      <PageHeaderActions title="마이페이지" amount={fitPoint} />
 
       <div className="p-4 space-y-4">
-        {/* 1. 사용자 프로필 - 닉네임, 캐릭터 레벨, 연속 달성 일수 */}
-        <section className={`${CARD} p-4`} aria-label="프로필">
-          <div className="flex justify-between items-start gap-2">
-            <h2 className="text-base font-bold text-gray-800">{MOCK_PROFILE.nickname}</h2>
-            <span className="shrink-0 bg-[#DCEEFF] text-sky-800 text-[11px] font-bold px-2.5 py-1 rounded-full">
-              {MOCK_PROFILE.level} · {MOCK_PROFILE.characterName}
-            </span>
+        {/* 불러오기 실패 안내 (이전 값이 있으면 그대로 보여주고 다시 시도만 제공) */}
+        {errorMessage && (
+          <div role="alert" className="flex items-center justify-between gap-2 rounded-2xl bg-rose-50 border border-rose-100 px-3.5 py-2.5">
+            <p className="text-xs font-bold text-rose-600">{errorMessage}</p>
+            <button
+              type="button"
+              onClick={() => void refresh()}
+              className="shrink-0 inline-flex items-center gap-1 rounded-full bg-white px-3 py-1 text-[11px] font-bold text-rose-600 border border-rose-200 cursor-pointer"
+            >
+              <RefreshCw size={12} aria-hidden="true" />
+              다시 시도
+            </button>
           </div>
-          <p className="flex items-center gap-1 mt-1 text-xs text-gray-500">
-            <Flame size={ICON_SIZE.inline} className="text-orange-500" aria-hidden="true" />
-            <span className="font-semibold text-orange-500">{MOCK_PROFILE.streakDays}일 연속</span>
-            · 오늘도 가볍게!
-          </p>
+        )}
+
+        {/* 1. 프로필 - 닉네임, 캐릭터 레벨, 연속 달성 일수 */}
+        <section className={`${CARD} p-4 flex items-center gap-3`} aria-label="프로필">
+          {/* 프로필 이미지: 헤더 캐릭터 메뉴와 같은 아바타 (실제 착용·배경, 메뉴는 헤더에서 열림) */}
+          <CharacterAvatar className="w-12 h-12" />
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <h2 className="text-base font-bold text-gray-800 truncate">{nickname}</h2>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="inline-flex items-center bg-[#DCEEFF] text-sky-800 text-[11px] font-bold px-2.5 py-1 rounded-full whitespace-nowrap">
+                Lv.{progress ? progress.level : '-'} · {character.name}
+              </span>
+              {streak && (
+                <span
+                  className={`inline-flex items-center gap-1 text-[11px] font-bold whitespace-nowrap ${
+                    streak.currentStreak > 0 ? 'text-orange-500' : 'text-gray-400'
+                  }`}
+                >
+                  <Flame size={12} aria-hidden="true" />
+                  {streak.currentStreak > 0 ? `${streak.currentStreak}일 연속` : '연속 기록 0일'}
+                </span>
+              )}
+            </div>
+          </div>
         </section>
 
-        {/* 2. 내 캐릭터 - 현재 착용 중인 캐릭터와 아이템 */}
+        {/* 2. 연속 기록 (Streak) */}
+        {streak ? (
+          <StreakCard streak={streak} isMock={isMock} onOpenRepair={() => setRepairOpen(true)} onGoMissions={goMissions} />
+        ) : status === 'loading' ? (
+          <Skeleton className="h-40" />
+        ) : null}
+
+        {/* 3. 내 캐릭터 + 레벨·XP */}
         <section className={`${CARD} p-3 space-y-3`} aria-label="내 캐릭터">
           <div className="flex justify-between items-center px-1">
             <h2 className="flex items-center gap-1.5 text-sm font-bold text-gray-800">
               <PawPrint size={ICON_SIZE.title} className="text-[#2F8A5B]" aria-hidden="true" />
-              내 캐릭터 · {MOCK_PROFILE.characterName}
+              내 캐릭터 · {character.name}
             </h2>
-            <span className="text-xs font-bold text-[#2F8A5B]">{MOCK_PROFILE.level}</span>
+            <button
+              type="button"
+              onClick={() => navigate('/shop')}
+              className="inline-flex items-center gap-0.5 text-[11px] font-bold text-[#2F8A5B] bg-[#DDF3E8] rounded-full pl-2.5 pr-1.5 py-1 cursor-pointer hover:brightness-95"
+            >
+              <Palette size={12} aria-hidden="true" />
+              꾸미러 가기
+              <ChevronRight size={12} aria-hidden="true" />
+            </button>
           </div>
           <CharacterStage
             equippedParts={myPageEquippedParts}
-            label={`${MOCK_PROFILE.characterName} 캐릭터`}
+            label={`${character.name} 캐릭터`}
             statusText={`${character.name} · ${background?.name ?? '기본 배경'}`}
             backgroundSrc={background?.imageSrc ?? null}
           />
+          {progress ? <LevelCard progress={progress} isMock={isMock} /> : status === 'loading' ? <Skeleton className="h-28" /> : null}
           <ul className="grid grid-cols-3 gap-2">
             {equippedSummary.map((part) => {
               const PartIcon = CATEGORY_ICON[part.category];
@@ -138,20 +260,82 @@ export const MyPage: React.FC = () => {
           </ul>
         </section>
 
-        {/* 3. FitPoint - 연한 노란색 (포인트/보상 정보) */}
-        <section className="bg-[#FFF6D9] border border-[#FFE8A8] rounded-2xl px-4 py-3.5 flex justify-between items-center" aria-label="FitPoint">
-          <span className="flex items-center gap-1.5 text-sm text-gray-700">
-            <span className="w-6 h-6 rounded-full bg-[#FFE8A8] flex items-center justify-center text-amber-700">
-              <Gem size={ICON_SIZE.inline} aria-hidden="true" />
-            </span>
-            현재 FitPoint
-          </span>
-          <span className="text-sm font-extrabold text-amber-900 tabular-nums">
-            {fitPoint.toLocaleString()} FitPoint
-          </span>
+        {/* 4. 포인트(FP)와 경험치(XP) — 쓰는 값과 쌓이는 값을 색으로 구분 */}
+        <section className="grid grid-cols-2 gap-3" aria-label="FitPoint와 경험치">
+          {/* 잔액을 누르면 적립·사용 내역 (API-07) */}
+          <button
+            type="button"
+            onClick={() => navigate('/points')}
+            aria-label={`FitPoint ${fitPoint.toLocaleString()} FP, 적립·사용 내역 보기`}
+            className="text-left rounded-2xl bg-[#FFF6D9] border border-[#FFE8A8] px-3.5 py-3 cursor-pointer hover:brightness-[0.98]"
+          >
+            <p className="flex items-center justify-between gap-1 text-xs font-bold text-amber-800">
+              <span className="flex items-center gap-1.5">
+                <span className="w-6 h-6 rounded-full bg-[#FFE8A8] flex items-center justify-center text-amber-700">
+                  <Gem size={ICON_SIZE.inline} aria-hidden="true" />
+                </span>
+                FitPoint
+              </span>
+              <span className="inline-flex items-center text-[10px] font-bold text-amber-700">
+                내역
+                <ChevronRight size={12} aria-hidden="true" />
+              </span>
+            </p>
+            <p className="mt-1.5 text-lg font-extrabold text-amber-900 leading-none">
+              <AnimatedNumber value={fitPoint} /> <span className="text-xs font-bold">FP</span>
+            </p>
+            <p className="mt-1 text-[10px] text-amber-800/70">상점·기록 복구·기프티콘에 쓰는 포인트</p>
+          </button>
+          <div className="rounded-2xl bg-[#EEF7FF] border border-[#DCEEFF] px-3.5 py-3">
+            <p className="flex items-center gap-1.5 text-xs font-bold text-sky-800">
+              <span className="w-6 h-6 rounded-full bg-[#DCEEFF] flex items-center justify-center text-sky-700">
+                <Sparkles size={ICON_SIZE.inline} aria-hidden="true" />
+              </span>
+              경험치
+            </p>
+            <p className="mt-1.5 text-lg font-extrabold text-sky-800 leading-none">
+              {progress ? <AnimatedNumber value={progress.totalEarnedXp} /> : '-'} <span className="text-xs font-bold">XP</span>
+            </p>
+            <p className="mt-1 text-[10px] text-sky-800/70">미션으로 쌓이고 줄지 않아요</p>
+          </div>
         </section>
 
-        {/* 4. 보유 아이템 - 공유 상태의 실제 보유 목록 */}
+        {/* 혜택: 기프티콘 교환 · Premium 구독 */}
+        <section className={`${CARD} divide-y divide-gray-50`} aria-label="혜택">
+          <button
+            type="button"
+            onClick={() => navigate('/rewards')}
+            className="w-full flex items-center gap-2.5 p-4 text-left cursor-pointer hover:bg-gray-50 rounded-t-2xl"
+          >
+            <span className="w-8 h-8 rounded-full bg-violet-100 text-violet-600 flex items-center justify-center shrink-0">
+              <Gift size={ICON_SIZE.title} aria-hidden="true" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-bold text-gray-800">기프티콘 교환</span>
+              <span className="block text-xs text-gray-500 mt-0.5">FitPoint로 상품권 교환 · 보관함</span>
+            </span>
+            <ChevronRight size={16} className="shrink-0 text-gray-400" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate('/mypage/subscription')}
+            className="w-full flex items-center gap-2.5 p-4 text-left cursor-pointer hover:bg-gray-50 rounded-b-2xl"
+          >
+            <span className="w-8 h-8 rounded-full bg-[#F1E9FF] text-violet-700 flex items-center justify-center shrink-0">
+              <Crown size={ICON_SIZE.title} aria-hidden="true" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-bold text-gray-800">구독</span>
+              <span className="block text-xs text-gray-500 mt-0.5">
+                {/* 플랜을 아직 못 불러왔으면 Basic으로 잘못 보이지 않게 */}
+                {!streak ? '구독 상태 확인' : streak.plan === 'premium' ? 'Premium 이용 중' : 'Basic 이용 중 · Premium 알아보기'}
+              </span>
+            </span>
+            <ChevronRight size={16} className="shrink-0 text-gray-400" aria-hidden="true" />
+          </button>
+        </section>
+
+        {/* 5. 보유 아이템 - 공유 상태의 실제 보유 목록 */}
         <section className={`${CARD} p-4 space-y-3`} aria-label="보유 아이템">
           <div className="flex justify-between items-center">
             <h2 className="flex items-center gap-1.5 text-sm font-bold text-gray-800">
@@ -190,56 +374,107 @@ export const MyPage: React.FC = () => {
           )}
         </section>
 
-        {/* 5. 설정 */}
+        {/* 6. 설정 */}
         <section className="space-y-2" aria-label="설정">
           <h2 className="text-sm font-bold text-gray-800 px-1">설정</h2>
 
           <div className={`${CARD} p-4 flex justify-between items-center gap-3`}>
-            <div className="flex items-start gap-2.5">
+            {/* min-w-0 + flex-1: 긴 글은 말줄임 처리해 [수정] 버튼이 카드 밖으로 밀리지 않게 */}
+            <div className="flex items-start gap-2.5 min-w-0 flex-1">
               <span className="w-8 h-8 rounded-full bg-[#DCEEFF] text-sky-700 flex items-center justify-center shrink-0">
                 <UserPen size={ICON_SIZE.title} aria-hidden="true" />
               </span>
-              <div>
+              <div className="min-w-0">
                 <p className="text-sm font-bold text-gray-800">프로필</p>
-                <p className="text-xs text-gray-500 mt-0.5">이름과 기본 정보 관리</p>
+                <p className="text-xs text-gray-500 mt-0.5 truncate">
+                  {goalTitle(profile.goal)} · {minutesTitle}
+                </p>
               </div>
             </div>
-            {/* TODO: 정보 관리 화면(라우트)이 아직 없어 비활성 */}
             <button
               type="button"
-              disabled
-              title="정보 관리 화면 준비 중"
-              className="shrink-0 text-xs font-bold px-3.5 py-1.5 rounded-full bg-gray-100 text-gray-400 cursor-not-allowed"
+              onClick={() => navigate('/mypage/profile')}
+              className="shrink-0 text-xs font-bold px-3.5 py-1.5 rounded-full bg-[#DDF3E8] text-[#2F8A5B] cursor-pointer hover:brightness-95"
             >
-              수정 · 준비 중
+              수정
             </button>
           </div>
 
-          <div className={`${CARD} p-4 flex justify-between items-center gap-3`}>
-            <div className="flex items-start gap-2.5">
-              <span className="w-8 h-8 rounded-full bg-[#FFE8A8] text-amber-700 flex items-center justify-center shrink-0">
-                <Bell size={ICON_SIZE.title} aria-hidden="true" />
-              </span>
-              <div>
-                <p className="text-sm font-bold text-gray-800">운동 알림</p>
-                <p className="text-xs text-gray-500 mt-0.5">매일 운동할 시간을 알려드려요</p>
-                <p className="text-[11px] text-gray-400 mt-0.5">OS 푸시 알림 연동 준비 중</p>
+          <div className={`${CARD} p-4 space-y-3`}>
+            <div className="flex justify-between items-center gap-3">
+              <div className="flex items-start gap-2.5">
+                <span className="w-8 h-8 rounded-full bg-[#FFE8A8] text-amber-700 flex items-center justify-center shrink-0">
+                  <Bell size={ICON_SIZE.title} aria-hidden="true" />
+                </span>
+                <div>
+                  <p className="text-sm font-bold text-gray-800">운동 알림</p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {reminder.enabled ? `매일 ${reminder.time}에 알려드려요` : '매일 운동할 시간을 알려드려요'}
+                  </p>
+                </div>
               </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={reminder.enabled}
+                aria-label="운동 알림"
+                onClick={() => void toggleReminder()}
+                className={`shrink-0 relative w-12 h-7 rounded-full transition cursor-pointer ${reminder.enabled ? 'bg-[#59B985]' : 'bg-gray-200'}`}
+              >
+                <span
+                  className={`absolute top-1 w-5 h-5 rounded-full bg-white shadow-sm transition-all ${reminder.enabled ? 'left-6' : 'left-1'}`}
+                />
+              </button>
             </div>
-            {/* TODO: OS 푸시 설정 연동 전까지 토글 비활성 (실제 알림 설정이 바뀌는 것처럼 보이지 않도록) */}
-            <button
-              type="button"
-              role="switch"
-              aria-checked={false}
-              aria-label="운동 알림 (준비 중)"
-              disabled
-              className="shrink-0 relative w-12 h-7 rounded-full bg-gray-200 cursor-not-allowed"
-            >
-              <span className="absolute top-1 left-1 w-5 h-5 rounded-full bg-white shadow-sm" />
-            </button>
+            {reminder.enabled && (
+              <div className="flex items-center justify-between gap-2 pl-[42px]">
+                <label className="flex items-center gap-2 text-xs text-gray-600">
+                  알림 시각
+                  <select
+                    value={reminder.time}
+                    onChange={(event) => writeReminder({ ...reminder, time: event.target.value })}
+                    className="rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs font-bold text-gray-700"
+                  >
+                    {REMINDER_TIMES.map((time) => (
+                      <option key={time} value={time}>
+                        {time}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setReminderNote(showWorkoutNotification() ? '테스트 알림을 보냈어요.' : '알림을 보내지 못했어요. 브라우저 알림 권한을 확인해 주세요.')}
+                  className="text-[11px] font-bold text-[#2F8A5B] bg-[#DDF3E8] rounded-full px-2.5 py-1 cursor-pointer"
+                >
+                  테스트 알림
+                </button>
+              </div>
+            )}
+            {(reminderNote || permission === 'denied') && (
+              <p role="status" className="pl-[42px] text-[11px] text-gray-500">
+                {reminderNote ?? '브라우저 알림이 차단돼 있어요. 사이트 설정에서 알림을 허용해 주세요.'}
+              </p>
+            )}
+            <p className="pl-[42px] text-[10px] text-gray-400">앱을 닫아 두면 알림이 오지 않아요 (푸시 알림 서버 준비 중)</p>
           </div>
         </section>
       </div>
+
+      {/* 복구 팝업: [기록 복구하기]를 눌렀을 때만 (UI 12) */}
+      {repairOpen && streak && (
+        <StreakRepairSheet
+          streak={streak}
+          balance={fitPoint}
+          isMock={isMock}
+          onClose={closeRepair}
+          onSubmit={repairStreak}
+          onSuccess={handleRepaired}
+          onGoMissions={goMissions}
+        />
+      )}
+      {/* 복구 완료 안내 (UI 13) */}
+      {toast && <Toast key={toast.seq} message={toast.message} onClose={closeToast} />}
 
       <BottomNav active="mypage" />
     </div>

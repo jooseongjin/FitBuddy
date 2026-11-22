@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360" role="img" aria-label="올리브영 상품권 예시 이미지">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3f6b57"/><stop offset="1" stop-color="#1f3d33"/>
+    </linearGradient>
+  </defs>
+  <rect width="640" height="360" rx="28" fill="url(#bg)"/>
+  <rect x="24" y="24" width="592" height="312" rx="20" fill="none" stroke="#ffffff" stroke-opacity=".55" stroke-width="2" stroke-dasharray="8 8"/>
+  <text x="48" y="92" font-family="Pretendard, 'Noto Sans KR', sans-serif" font-size="22" fill="#ffffff" fill-opacity=".85">FitBuddy 리워드 · 모바일 상품권</text>
+  <text x="48" y="168" font-family="Pretendard, 'Noto Sans KR', sans-serif" font-size="44" font-weight="800" fill="#ffffff">올리브영 상품권</text>
+  <text x="48" y="226" font-family="Pretendard, 'Noto Sans KR', sans-serif" font-size="36" font-weight="700" fill="#ffffff">5,000원</text>
+  <g fill="#ffffff" fill-opacity=".9">
+    <rect x="48" y="256" width="4" height="48"/><rect x="58" y="256" width="2" height="48"/><rect x="66" y="256" width="6" height="48"/>
+    <rect x="78" y="256" width="2" height="48"/><rect x="86" y="256" width="4" height="48"/><rect x="96" y="256" width="2" height="48"/>
+    <rect x="104" y="256" width="6" height="48"/><rect x="116" y="256" width="2" height="48"/><rect x="124" y="256" width="4" height="48"/>
+    <rect x="134" y="256" width="6" height="48"/><rect x="146" y="256" width="2" height="48"/><rect x="154" y="256" width="4" height="48"/>
+  </g>
+  <g transform="rotate(-18 470 190)">
+    <rect x="360" y="150" width="230" height="64" rx="12" fill="#000000" fill-opacity=".28" stroke="#ffffff" stroke-width="3"/>
+    <text x="475" y="190" text-anchor="middle" font-family="Pretendard, 'Noto Sans KR', sans-serif" font-size="26" font-weight="800" fill="#ffffff">SAMPLE · 예시</text>
+  </g>
+  <text x="48" y="328" font-family="Pretendard, 'Noto Sans KR', sans-serif" font-size="14" fill="#ffffff" fill-opacity=".8">실제 사용할 수 없는 예시 이미지입니다.</text>
+</svg>

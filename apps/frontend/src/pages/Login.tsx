@@ -1,14 +1,22 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { isAxiosError } from 'axios';
+import { Link, Navigate } from 'react-router-dom';
 import { Eye, EyeOff, AlertCircle } from 'lucide-react';
 import api from '../api/axios';
+import { saveLoginUser } from '../lib/profileStorage';
+import { enterAccount, readAuthState } from '../lib/accountSession';
 
 export const Login: React.FC = () => {
-  const navigate = useNavigate();
   const [userId, setUserId] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+
+  // 저장된 로그인 정보(토큰)가 있으면 로그인 화면을 건너뛰고 홈으로 이동 (앱을 껐다 켜도 로그인 유지)
+  // replace: 뒤로가기로 로그인 화면이 다시 나오지 않게 한다
+  if (readAuthState().loggedIn) {
+    return <Navigate to="/dashboard" replace />;
+  }
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,9 +31,13 @@ export const Login: React.FC = () => {
       // API-02 로그인 API 호출
       const res = await api.post('/auth/login', { user_id: userId, password });
       localStorage.setItem('token', res.data.token);
-      navigate('/dashboard');
-    } catch (err: any) {
-      if (err.response?.status === 401) {
+      // 로그인한 계정 정보(user_number, user_id, nickname)를 마이페이지 프로필에 그대로 사용
+      // 로그인 응답에 이메일이 없어, 이메일로 로그인한 경우에만 입력한 이메일을 함께 저장
+      saveLoginUser(res.data.user, userId.includes('@') ? { email: userId } : undefined);
+      // 이전 사용자의 잔액·캐릭터 등이 남지 않도록 계정 전환 후 새로 불러와 이동
+      enterAccount('/dashboard');
+    } catch (err: unknown) {
+      if (isAxiosError(err) && err.response?.status === 401) {
         setErrorMsg('아이디 또는 비밀번호를 다시 확인해주세요.');
       } else {
         setErrorMsg('서버와 연결할 수 없습니다. 잠시 후 다시 시도해주세요.');

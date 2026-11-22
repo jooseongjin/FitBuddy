@@ -1,11 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Check, CircleAlert, CircleCheck, Eye, EyeOff, Gem, Info, Lock, Menu, Palette, Target, User } from 'lucide-react';
+import { Check, CircleAlert, CircleCheck, Eye, EyeOff, Gem, Info, Lock, Palette, Target } from 'lucide-react';
 import { CharacterCanvas, type CharacterRig, type EquippedParts } from '../components/CharacterCanvas';
 import { ItemThumb, type IconImage } from '../components/ItemThumb';
 import { BottomNav } from '../components/BottomNav';
 import { CharacterStage } from '../components/CharacterStage';
-import { FitPointChip } from '../components/FitPointChip';
 import { CATEGORY_ICON, ICON_SIZE } from '../components/categoryIcons';
 import {
   BACKGROUND_ITEMS,
@@ -14,9 +13,13 @@ import {
   PART_ITEMS,
   findCharacter,
   getEquippedParts,
+  isPartAvailableFor,
+  type CharacterDef,
   type PartCategory,
 } from '../data/characterItems';
 import { useCharacterStore } from '../context/characterStore';
+import { progressApi } from '../api/progressClient';
+import { PageHeaderActions } from '../components/PageHeaderActions';
 
 type ShopTab = 'character' | PartCategory | 'bg';
 // 미리 착용은 파츠와 배경에만 적용 (캐릭터는 보유 캐릭터 교체만 지원)
@@ -38,6 +41,8 @@ type ShopEntry = {
   bgColor: string;
   // 이미지 에셋이 없는 항목은 false → 잠금(준비 중) 카드로 표시
   available: boolean;
+  // 잠금 카드에 보여줄 안내 (예: 지금 캐릭터용 이미지가 아직 없음)
+  lockText?: string;
 };
 
 type Preview = { tab: PreviewTab; id: string };
@@ -81,7 +86,8 @@ const EMPTY_MESSAGE: Record<ShopTab, string> = {
 
 const isPreviewTab = (tab: ShopTab): tab is PreviewTab => tab !== 'character';
 
-const getEntries = (tab: ShopTab): ShopEntry[] => {
+// 파츠는 지금 캐릭터용 레이어가 있을 때만 선택 가능 (캐릭터마다 몸 모양이 달라 전용 이미지가 필요)
+const getEntries = (tab: ShopTab, character: Pick<CharacterDef, 'id' | 'name'>): ShopEntry[] => {
   if (tab === 'character') {
     return CHARACTERS.map((character) => ({
       id: character.id,
@@ -108,7 +114,8 @@ const getEntries = (tab: ShopTab): ShopEntry[] => {
     price: item.price,
     thumb: item.icon ? { kind: 'icon', icon: item.icon } : null,
     bgColor: item.bgColor,
-    available: true,
+    available: isPartAvailableFor(item, character.id),
+    lockText: `${character.name}용 준비 중`,
   }));
 };
 
@@ -156,7 +163,7 @@ export const Shop: React.FC = () => {
   // 마이페이지와 공유하는 상태 (FitPoint, 보유 목록, 캐릭터, 착용, 배경)
   const {
     fitPoint,
-    setFitPoint,
+    spendFitPoint,
     ownedIds,
     setOwnedIds,
     currentCharacterId,
@@ -171,6 +178,8 @@ export const Shop: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ShopTab>('head');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
+  // 구매 완료 체크(pop)·부족 안내(shake) 효과를 같은 아이템에서도 다시 실행하기 위한 번호
+  const [effectSeq, setEffectSeq] = useState(0);
 
   const currentCharacter = findCharacter(currentCharacterId);
   const equippedIds = equippedByCharacter[currentCharacterId] ?? EMPTY_EQUIPPED;
@@ -187,16 +196,17 @@ export const Shop: React.FC = () => {
   const displayedBackgroundId = preview?.tab === 'bg' ? preview.id : backgroundId;
   const displayedBackground = BACKGROUND_ITEMS.find((item) => item.id === displayedBackgroundId) ?? null;
 
-  const entries = getEntries(activeTab);
+  const characterInfo = { id: currentCharacter.id, name: currentCharacter.name };
+  const entries = getEntries(activeTab, characterInfo);
   const selectedEntry = entries.find((entry) => entry.id === selectedId) ?? null;
   const activeTabInfo = TABS.find((tab) => tab.key === activeTab);
   const previewEntry = preview
-    ? getEntries(preview.tab).find((entry) => entry.id === preview.id) ?? null
+    ? getEntries(preview.tab, characterInfo).find((entry) => entry.id === preview.id) ?? null
     : null;
 
   const equippedParts = useMemo(
-    () => getEquippedParts(currentCharacter, displayedIds),
-    [currentCharacter, displayedIds],
+    () => getEquippedParts(findCharacter(currentCharacterId), displayedIds),
+    [currentCharacterId, displayedIds],
   );
 
   const isOwned = (entry: ShopEntry) => ownedIds.has(entry.id);
@@ -228,15 +238,15 @@ export const Shop: React.FC = () => {
 
   const handlePurchase = (entry: ShopEntry) => {
     // 준비 중이거나 이미 보유한 항목은 구매 불가 (중복 구매 방지)
-    if (!entry.available || isOwned(entry)) return;
+    if (!progressApi.isMock || !entry.available || isOwned(entry)) return;
 
-    // 구매 전 클라이언트에서 잔액 선검증
-    if (fitPoint < entry.price) {
+    // 구매 전 클라이언트에서 잔액 선검증 (FP만 차감 — XP·레벨은 바뀌지 않음)
+    setEffectSeq((previous) => previous + 1);
+    if (!spendFitPoint(entry.price, entry.name)) {
       setFeedback({ type: 'insufficient', entry, shortage: entry.price - fitPoint });
       return;
     }
 
-    setFitPoint((previous) => previous - entry.price);
     setOwnedIds((previous) => new Set(previous).add(entry.id));
     // 구매만 하고 장착은 별도 동작이므로 미리보기는 종료
     setPreview(null);
@@ -302,9 +312,9 @@ export const Shop: React.FC = () => {
     if (!selectedEntry.available) return { label: '준비 중', disabled: true, run: NONE };
     if (!isOwned(selectedEntry)) {
       return {
-        label: 'FitPoint로 구매하기',
+        label: progressApi.isMock ? 'FitPoint로 구매하기' : '구매 준비 중',
         suffix: ` · ${selectedEntry.price.toLocaleString()} FP`,
-        disabled: feedback?.type === 'insufficient',
+        disabled: !progressApi.isMock || feedback?.type === 'insufficient',
         run: () => handlePurchase(selectedEntry),
       };
     }
@@ -337,7 +347,11 @@ export const Shop: React.FC = () => {
   const renderMessage = () => {
     if (feedback?.type === 'insufficient') {
       return (
-        <div className="flex flex-col items-center gap-1.5 bg-rose-50 border border-rose-100 rounded-xl px-3 py-2">
+        // 부족 안내가 뜰 때 좌우로 살짝 흔들림 (fb-shake 300ms)
+        <div
+          key={effectSeq}
+          className="flex flex-col items-center gap-1.5 bg-rose-50 border border-rose-100 rounded-xl px-3 py-2 animate-fb-shake"
+        >
           <p className="flex items-center gap-1.5 text-rose-600 font-bold">
             <CircleAlert size={ICON_SIZE.inline} aria-hidden="true" />
             {feedback.entry.name} · {feedback.entry.price.toLocaleString()} FP · {feedback.shortage.toLocaleString()} FitPoint 부족
@@ -358,7 +372,15 @@ export const Shop: React.FC = () => {
     let icon = <Info size={ICON_SIZE.inline} className="shrink-0 text-gray-400" aria-hidden="true" />;
     let lines: string[];
     if (feedback?.type === 'purchased') {
-      icon = <CircleCheck size={ICON_SIZE.inline} className="shrink-0 text-[#2F8A5B]" aria-hidden="true" />;
+      // 구매 완료 체크가 통통 튐 (fb-pop 250ms)
+      icon = (
+        <CircleCheck
+          key={effectSeq}
+          size={ICON_SIZE.inline}
+          className="shrink-0 text-[#2F8A5B] animate-fb-pop"
+          aria-hidden="true"
+        />
+      );
       lines = [
         `${feedback.entry.name} 구매 완료 · -${feedback.entry.price.toLocaleString()} FP · ${ACTIVATE_LABEL[feedback.tab].replace('하기', '')} 가능`,
         '이미 보유한 항목은 다시 구매할 수 없어요.',
@@ -405,7 +427,7 @@ export const Shop: React.FC = () => {
       return (
         <span className={`${base} bg-gray-100 text-gray-500`}>
           <Lock size={ICON_SIZE.badge} aria-hidden="true" />
-          잠금 · 준비 중
+          {entry.lockText ?? '잠금 · 준비 중'}
         </span>
       );
     }
@@ -418,7 +440,12 @@ export const Shop: React.FC = () => {
       );
     }
     if (isOwned(entry)) {
-      return <span className={`${base} bg-[#DCEEFF] text-sky-800`}>보유 중</span>;
+      // 캐릭터는 구매 없이 기본 보유 → 바로 교체할 수 있다는 의미로 표시
+      return (
+        <span className={`${base} bg-[#DCEEFF] text-sky-800`}>
+          {activeTab === 'character' ? '교체 가능' : '보유 중'}
+        </span>
+      );
     }
     return (
       <span className={`${base} bg-[#FFE8A8] text-amber-900`}>
@@ -439,25 +466,7 @@ export const Shop: React.FC = () => {
     <div className="min-h-screen bg-[#F8F5EC] pb-24 max-w-md mx-auto shadow-md">
       {/* 상단 헤더 - 보유 FitPoint 실시간 노출 */}
       <div className="bg-white sticky top-0 z-10 shadow-sm">
-        <div className="px-4 py-3 border-b border-gray-100 flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <span className="w-9 h-9 flex items-center justify-center text-gray-700">
-              <Menu size={ICON_SIZE.nav} aria-hidden="true" />
-            </span>
-            <div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-6 h-6 rounded-lg bg-[#DDF3E8] text-[#2F8A5B] flex items-center justify-center">
-                  <Palette size={ICON_SIZE.inline} aria-hidden="true" />
-                </span>
-                <h1 className="text-base font-bold text-gray-800">꾸미기 상점</h1>
-              </div>
-              <FitPointChip amount={fitPoint} />
-            </div>
-          </div>
-          <span className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-gray-500">
-            <User size={ICON_SIZE.nav} aria-hidden="true" />
-          </span>
-        </div>
+        <PageHeaderActions title="꾸미기 상점" amount={fitPoint} TitleIcon={Palette} />
 
         {/* 미리 착용 / 구매 / 장착 액션 패널 */}
         <div className="px-4 py-2.5">
@@ -518,6 +527,7 @@ export const Shop: React.FC = () => {
           backgroundSrc={displayedBackground?.imageSrc ?? null}
           previewName={previewEntry?.name ?? null}
           reservePreviewSpace
+          motionKey={`${currentCharacterId}|${displayedIds.head}|${displayedIds.clothes}|${displayedIds.acc}`}
         />
 
         {/* 카테고리 탭 - 아이콘 + 텍스트 5칸 그리드 (좁은 화면에서도 잘리지 않도록) */}
@@ -572,7 +582,7 @@ export const Shop: React.FC = () => {
               const selected = entry.id === selectedId;
               const previewing = isPreviewing(entry);
 
-              // 잠금 캐릭터: 가격/보유 표시 없이 잠금 상태만 표시
+              // 잠금 항목(이미지 없음, 또는 지금 캐릭터용 이미지 없음): 가격/보유 표시 없이 잠금 상태만 표시
               if (!entry.available) {
                 return (
                   <button
@@ -580,14 +590,27 @@ export const Shop: React.FC = () => {
                     key={entry.id}
                     disabled
                     aria-pressed={false}
-                    aria-label={`${entry.name}, 준비 중`}
+                    aria-label={`${entry.name}, ${entry.lockText ?? '준비 중'}`}
                     className="p-2 rounded-2xl text-left border border-dashed border-gray-300 bg-white/60 cursor-not-allowed"
                   >
-                    <div className="h-28 rounded-xl bg-gray-100 flex flex-col items-center justify-center gap-1.5">
-                      <span className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-gray-400">
-                        <Lock size={ICON_SIZE.tab} aria-hidden="true" />
-                      </span>
-                      <span className="text-[10px] font-semibold text-gray-400">이미지 준비 중</span>
+                    <div className="relative h-28 rounded-xl bg-gray-100 flex flex-col items-center justify-center gap-1.5 overflow-hidden">
+                      {entry.thumb ? (
+                        <>
+                          <div className="h-full w-full flex items-center justify-center opacity-35 grayscale">
+                            <Thumb thumb={entry.thumb} />
+                          </div>
+                          <span className="absolute w-9 h-9 rounded-full bg-white/90 flex items-center justify-center text-gray-400">
+                            <Lock size={ICON_SIZE.tab} aria-hidden="true" />
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-gray-400">
+                            <Lock size={ICON_SIZE.tab} aria-hidden="true" />
+                          </span>
+                          <span className="text-[10px] font-semibold text-gray-400">이미지 준비 중</span>
+                        </>
+                      )}
                     </div>
                     <div className="pt-2 px-0.5 space-y-1">
                       <p className="text-sm font-bold text-gray-400 truncate">{entry.name}</p>

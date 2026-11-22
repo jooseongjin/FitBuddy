@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { isAxiosError } from 'axios';
+import { Link } from 'react-router-dom';
 import { AlertCircle } from 'lucide-react';
 import api from '../api/axios';
+import { saveLoginUser } from '../lib/profileStorage';
+import { enterAccount } from '../lib/accountSession';
 
 export const Signup: React.FC = () => {
-  const navigate = useNavigate();
   const [nickname, setNickname] = useState('');
   const [email, setEmail] = useState('');
   const [userId, setUserId] = useState('');
@@ -40,10 +42,27 @@ export const Signup: React.FC = () => {
         nickname,
       });
 
+      // 가입 직후 같은 정보로 로그인해 토큰·계정 정보를 저장 → 대시보드·내 정보에 가입한 계정이 표시됨
+      // (로그인에 실패해도 가입은 완료된 상태라 그대로 진행하고, 나중에 로그인 화면에서 로그인하면 됨)
+      let loggedIn = false;
+      try {
+        const login = await api.post('/auth/login', { user_id: userId, password });
+        localStorage.setItem('token', login.data.token);
+        saveLoginUser(login.data.user, { email });
+        loggedIn = true;
+      } catch {
+        // 무시
+      }
+
       alert('가입을 환영합니다! 맞춤 설문을 시작합니다.');
-      navigate('/onboarding/step1');
-    } catch (err: any) {
-      if (err.response?.status === 409) {
+      if (loggedIn) enterAccount('/onboarding/step1');
+      else {
+        localStorage.removeItem('token');
+        saveLoginUser(null);
+        enterAccount('/');
+      }
+    } catch (err: unknown) {
+      if (isAxiosError(err) && err.response?.status === 409) {
         setErrors({ server: '이미 사용 중인 아이디 또는 이메일입니다.' });
       } else {
         setErrors({ server: '가입 처리 중 오류가 발생했습니다.' });
