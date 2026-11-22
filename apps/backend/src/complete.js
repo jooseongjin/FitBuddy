@@ -1,129 +1,85 @@
-const express = require("express");
-const router = express.Router();
-const db = require("./db");
+const db = require('./db');
 
-function calculateLevel(totalXp) {
-  const safeXp = Math.max(0, Number(totalXp) || 0);
-  return Math.floor(Math.sqrt(safeXp / 100)) + 1;
-}
+const MAX_LEVEL = 20;
 
-function getPointMultiplier(isPremium) {
-  return isPremium ? 1.5 : 1.0;
-}
-
-router.post("/complete", async (req, res) => {
-  const { userId, missionId, completedAt } = req.body;
-
-  if (!userId || !missionId) {
-    return res.status(400).json({
-      ok: false,
-      message: "userId and missionId are required.",
-    });
+function calcLevelFromXp(totalXp) {
+  const xp = Math.max(0, Number(totalXp) || 0);
+  let level = 1;
+  for (let i = 2; i <= MAX_LEVEL; i += 1) {
+    const threshold = 50 * i * (i + 1);
+    if (xp >= threshold) {
+      level = i;
+    } else {
+      break;
+    }
   }
+  return level;
+}
 
-  let conn;
+const completeMission = async (req, res) => {
+  const userNumber = req.user.user_number;
+  const userMissionId = req.params.id;
+
+  const connection = await db.getConnection();
   try {
-    conn = await db.getConnection();
-    await conn.beginTransaction();
+    await connection.beginTransaction();
 
-    const [users] = await conn.query(
-      `SELECT id, fit_point, total_earned_xp, level, streak_days, last_completed_date, is_premium
-       FROM users
-       WHERE id = ? FOR UPDATE`,
-      [userId]
+    const [updateResult] = await connection.query(
+      "UPDATE User_missions SET mission_status = 'completed', completed_at = NOW() WHERE user_mission_id = ? AND Users_user_number = ? AND mission_status = 'assigned'",
+      [userMissionId, userNumber],
     );
 
-    if (!users || users.length === 0) {
-      await conn.rollback();
-      return res.status(404).json({ ok: false, message: "User not found." });
+    if (updateResult.affectedRows === 0) {
+      await connection.rollback();
+      return res.status(409).json({ message: '이미 완료되었거나 배정되지 않은 미션입니다.' });
     }
 
-    const [missions] = await conn.query(
-      `SELECT id, reward_points, reward_xp
-       FROM missions
-       WHERE id = ?`,
-      [missionId]
+    const [[missionInfo]] = await connection.query(
+      "SELECT m.base_point, m.Missions_id FROM User_missions um JOIN Missions m ON um.Missions_id = m.Missions_id WHERE um.user_mission_id = ?",
+      [userMissionId],
     );
 
-    if (!missions || missions.length === 0) {
-      await conn.rollback();
-      return res.status(404).json({ ok: false, message: "Mission not found." });
-    }
-
-    const user = users[0];
-    const mission = missions[0];
-
-    const basePoints = Number(mission.reward_points) || 0;
-    const baseXp = Number(mission.reward_xp) || 0;
-    const multiplier = getPointMultiplier(Boolean(user.is_premium));
-    const earnedPoints = Math.round(basePoints * multiplier);
-
-    const prevXp = Number(user.total_earned_xp) || 0;
-    const nextXp = prevXp + baseXp;
-    const prevLevel = Number(user.level) || calculateLevel(prevXp);
-    const nextLevel = calculateLevel(nextXp);
-    const nextPoints = (Number(user.fit_point) || 0) + earnedPoints;
-
-    const targetDate = completedAt
-      ? new Date(completedAt).toISOString().slice(0, 10)
-      : new Date().toISOString().slice(0, 10);
-
-    let nextStreak = Number(user.streak_days) || 0;
-    if (user.last_completed_date !== targetDate) {
-      nextStreak += 1;
-    }
-
-    await conn.query(
-      `UPDATE users
-       SET fit_point = ?,
-           total_earned_xp = ?,
-           level = ?,
-           streak_days = ?,
-           last_completed_date = ?
-       WHERE id = ?`,
-      [nextPoints, nextXp, nextLevel, nextStreak, targetDate, userId]
+    const [[subscription]] = await connection.query(
+      "SELECT plan, sub_status, expires_at FROM Subscriptions WHERE Users_user_number = ?",
+      [userNumber],
     );
 
-    await conn.query(
-      `INSERT INTO mission_completions (user_id, mission_id, earned_points, earned_xp, completed_date)
-       VALUES (?, ?, ?, ?, ?)`,
-      [userId, missionId, earnedPoints, baseXp, targetDate]
+    const isPremium = subscription && subscription.plan === 'premium' && new Date(subscription.expires_at) > new Date();
+    const multiplier = isPremium ? 1.5 : 1.0;
+    const basePoint = Number(missionInfo?.base_point ?? 0);
+    const earnedAmount = Math.floor(basePoint * multiplier);
+
+    await connection.query(
+      "INSERT INTO Point_transactions (Users_user_number, source, ref_id, base_point, multiplier, amount, created_at) VALUES (?, 'mission_complete', ?, ?, ?, ?, NOW())",
+      [userNumber, userMissionId, basePoint, multiplier, earnedAmount],
     );
 
-    await conn.commit();
+    const [[charRow]] = await connection.query(
+      "SELECT total_earned_xp FROM Characters WHERE Users_user_number = ? FOR UPDATE",
+      [userNumber],
+    );
+    const nextXp = Number(charRow?.total_earned_xp ?? 0) + earnedAmount;
+    const nextLevel = calcLevelFromXp(nextXp);
+
+    await connection.query(
+      "UPDATE Characters SET total_earned_xp = ?, level = ? WHERE Users_user_number = ?",
+      [nextXp, nextLevel, userNumber],
+    );
+
+    await connection.commit();
 
     return res.status(200).json({
-      ok: true,
-      data: {
-        userId,
-        missionId,
-        earnedPoints,
-        earnedXp: baseXp,
-        multiplier,
-        fitPoint: nextPoints,
-        totalEarnedXp: nextXp,
-        previousLevel: prevLevel,
-        level: nextLevel,
-        leveledUp: nextLevel > prevLevel,
-        streakDays: nextStreak,
-      },
+      success: true,
+      message: '미션 완료 처리되었습니다.',
+      data: { earned_point: earnedAmount, multiplier, total_earned_xp: nextXp, level: nextLevel },
     });
-  } catch (err) {
-    if (conn) {
-      try {
-        await conn.rollback();
-      } catch (_) {}
-    }
-    console.error("[complete.js] transaction error:", err);
-    return res.status(500).json({
-      ok: false,
-      message: "Failed to complete mission.",
-    });
+  } catch (error) {
+    try { await connection.rollback(); } catch {}
+    console.error('Complete Mission Error:', error);
+    return res.status(500).json({ message: '미션 완료 처리 중 오류가 발생했습니다.' });
   } finally {
-    if (conn) {
-      conn.release();
-    }
+    connection.release();
   }
-});
+};
 
-module.exports = router;
+module.exports = { completeMission, calcLevelFromXp };
