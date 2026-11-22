@@ -1,16 +1,22 @@
 import React, { useState } from 'react';
 import { isAxiosError } from 'axios';
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { Eye, EyeOff, AlertCircle } from 'lucide-react';
 import api from '../api/axios';
 import { saveLoginUser } from '../lib/profileStorage';
-import { enterAccount } from '../lib/accountSession';
+import { enterAccount, readAuthState } from '../lib/accountSession';
 
 export const Login: React.FC = () => {
   const [userId, setUserId] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+
+  // 저장된 로그인 정보(토큰)가 있으면 로그인 화면을 건너뛰고 홈으로 이동 (앱을 껐다 켜도 로그인 유지)
+  // replace: 뒤로가기로 로그인 화면이 다시 나오지 않게 한다
+  if (readAuthState().loggedIn) {
+    return <Navigate to="/dashboard" replace />;
+  }
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();

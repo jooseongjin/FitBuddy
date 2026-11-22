@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { logout } from '../lib/accountSession';
 
 // TRD 명세에 작성된 백엔드 REST API Base URL (/api/v1)
 const api = axios.create({
@@ -16,5 +17,20 @@ api.interceptors.request.use((config) => {
   }
   return config;
 });
+
+// 저장된 토큰이 만료·무효이면(401 INVALID_TOKEN / UNAUTHORIZED) 로그인 정보를 지우고 로그인 화면으로 보낸다.
+// 로그인 요청 자체의 실패나 비밀번호 확인 실패(INVALID_CREDENTIALS)는 각 화면이 처리하도록 그대로 넘긴다.
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const status = error?.response?.status;
+    const code = error?.response?.data?.code;
+    const hadToken = Boolean(error?.config?.headers?.Authorization);
+    if (status === 401 && hadToken && (code === 'INVALID_TOKEN' || code === 'UNAUTHORIZED')) {
+      logout();
+    }
+    return Promise.reject(error);
+  },
+);
 
 export default api;
