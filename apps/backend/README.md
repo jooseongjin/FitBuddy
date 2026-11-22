@@ -46,7 +46,7 @@ npm test                    # 통합 테스트 (migrate:reset 후 실행)
 
 진행 정보와 미션은 모두 요청 사용자 소유 행으로 제한됩니다. 포인트 잔액은 `Point_transactions` 합계이며, 미션 완료와 복구는 InnoDB 트랜잭션으로 처리합니다.
 
-Streak 복구 기본값은 개발용 임시 정책입니다. `.env`에서 `STREAK_REPAIR_COST` (기본 300), 무료 복구 월 횟수 `STREAK_REPAIR_FREE_BASIC` (기본 1)·`STREAK_REPAIR_FREE_PREMIUM` (기본 2), 포인트 복구 월 횟수 `STREAK_REPAIR_POINTS_BASIC` (기본 1)·`STREAK_REPAIR_POINTS_PREMIUM` (기본 2)로 조정할 수 있습니다. 무료 복구와 포인트 복구는 서로 다른 한도로 세며, 매월 1일 00:00 KST에 초기화되고 이월되지 않습니다. (이전 변수 `STREAK_REPAIR_MONTHLY_LIMIT_*`, `STREAK_REPAIR_PREMIUM_FREE`는 더 이상 쓰지 않습니다.)
+Streak 복구 기본값은 개발용 임시 정책입니다. `.env`에서 `STREAK_REPAIR_COST` (기본 300), 무료 복구 월 횟수 `STREAK_REPAIR_FREE_BASIC` (기본 1)·`STREAK_REPAIR_FREE_PREMIUM` (기본 2), 포인트 복구 월 횟수 `STREAK_REPAIR_POINTS_BASIC` (기본 1)·`STREAK_REPAIR_POINTS_PREMIUM` (기본 2)로 조정할 수 있습니다. 무료 복구와 포인트 복구는 서로 다른 한도로 세며, 매월 1일 00:00 KST에 초기화되고 이월되지 않습니다. 복구 대상은 최근 `STREAK_REPAIR_WINDOW_DAYS`(기본 3)일 안에 놓친 하루이며, 놓친 뒤 새로 시작한 경우에도 복구하면 이전 연속 기록과 합쳐집니다(복구한 날은 잇기만 하고 일수에는 더하지 않음). 이틀 이상 연속으로 놓친 경우는 복구할 수 없습니다. (이전 변수 `STREAK_REPAIR_MONTHLY_LIMIT_*`, `STREAK_REPAIR_PREMIUM_FREE`는 더 이상 쓰지 않습니다.)
 
 레벨 임계치가 아직 확정되지 않아 미션 완료 시 누적 XP만 DB에 쌓고 `Characters.level`은 유지합니다. API는 XP 임계치 필드를 `null`로 반환합니다.
 

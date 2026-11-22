@@ -283,7 +283,7 @@ const errorNextStep = (code: string | null): string => {
 
 const SheetHeader: React.FC<{ status: StreakState['repair']['status'] }> = ({ status }) => {
   const conf = {
-    available: { icon: <RotateCcw size={18} aria-hidden="true" />, cls: 'bg-[#DCEEFF] text-sky-700', title: '어제 기록 복구하기' },
+    available: { icon: <RotateCcw size={18} aria-hidden="true" />, cls: 'bg-[#DCEEFF] text-sky-700', title: '놓친 기록 복구하기' },
     monthly_limit: { icon: <CalendarX size={18} aria-hidden="true" />, cls: 'bg-gray-100 text-gray-500', title: '이번 달 복구 횟수를 모두 썼어요' },
     expired: { icon: <Info size={18} aria-hidden="true" />, cls: 'bg-gray-100 text-gray-500', title: '기록을 복구할 수 없어요' },
     none: { icon: <RotateCcw size={18} aria-hidden="true" />, cls: 'bg-[#DDF3E8] text-[#2F8A5B]', title: '연속 기록이 이어지고 있어요' },

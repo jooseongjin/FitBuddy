@@ -1,7 +1,8 @@
 // Streak 복구 월 한도 테스트: 무료 복구와 포인트 복구를 따로 센다 (npm run migrate:reset 후 실행)
 //   Basic   : 무료 월 1회 + 포인트 월 1회
 //   Premium : 무료 월 2회 + 포인트 월 2회
-//   매월 1일 00:00 KST에 초기화되고 이월되지 않는다. 복구 대상 날짜는 "어제" 하루뿐이다.
+//   매월 1일 00:00 KST에 초기화되고 이월되지 않는다.
+//   복구 대상: 최근 3일 안에 놓친 "하루". 놓친 뒤 새로 시작했어도 복구하면 이전 기록과 합쳐진다.
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'testsecret';
 const test = require('node:test');
 const assert = require('node:assert');
@@ -173,4 +174,72 @@ test('같은 날짜는 두 번 복구할 수 없다 (어제 하루만 복구 대
   const again = await repair(u, 'free');
   assert.equal(again.status, 409);
   assert.equal(await rowCount(u), 1);
+});
+
+// ---- 최근 3일 이내 복구 (놓친 뒤 이미 새로 시작한 경우) ----
+const kstDate = (offset) => new Date(Date.now() + 9 * 3600 * 1000 + offset * 24 * 3600 * 1000).toISOString().slice(0, 10);
+
+// completedOffsets: 미션을 완료한 날(오늘 기준 일수, 0 = 오늘), streak: 지금 저장된 연속 기록
+async function setupHistory({ completedOffsets, streak, lastOffset = 0, plan = 'basic' }) {
+  const u = await setup({ plan });
+  const [[mission]] = await pool.query('SELECT Missions_id FROM Missions ORDER BY Missions_id LIMIT 1');
+  for (const offset of completedOffsets) {
+    await pool.query(
+      `INSERT INTO User_missions (Missions_id, Users_user_number, mission_status, progress_value, assigned_date)
+       VALUES (?, ?, 'completed', 1, ?)`,
+      [mission.Missions_id, u.n, kstDate(offset)],
+    );
+  }
+  await pool.query('UPDATE Streaks SET current_streak = ?, last_completed_date = ? WHERE Users_user_number = ?', [streak, kstDate(lastOffset), u.n]);
+  return u;
+}
+
+test('3일 이내: 놓친 뒤 새로 시작했어도 놓친 날을 복구하면 이전 기록과 합쳐진다', async () => {
+  // 4·3일 전 완료(2일 연속) → 2일 전 놓침 → 어제·오늘 완료(2일 연속)
+  const u = await setupHistory({ completedOffsets: [-4, -3, -1, 0], streak: 2 });
+  const info = await repairInfo(u);
+  assert.equal(info.status, 'available');
+  assert.equal(info.missed_date, kstDate(-2));
+  assert.equal(info.broken_streak, 4);
+  const r = await call('/api/v1/streak/repair', 'POST', { missed_date: kstDate(-2), method: 'free' }, u.token);
+  assert.equal(r.status, 200);
+  const streak = (await call('/api/v1/streak', 'GET', null, u.token)).json.data;
+  assert.equal(streak.current_streak, 4);
+  assert.equal(streak.last_completed_date, kstDate(0));
+  assert.equal(streak.week.find((d) => d.date === kstDate(-2)).status, 'repaired');
+  assert.equal((await repairInfo(u)).status, 'none');
+});
+
+test('3일 이내: 3일 전에 놓친 날도 복구할 수 있고 포인트 복구도 된다', async () => {
+  // 5·4일 전 완료 → 3일 전 놓침 → 2일 전·어제 완료, 오늘은 아직
+  const u = await setupHistory({ completedOffsets: [-5, -4, -2, -1], streak: 2, lastOffset: -1 });
+  const info = await repairInfo(u);
+  assert.equal(info.status, 'available');
+  assert.equal(info.missed_date, kstDate(-3));
+  const before = await balanceOf(u);
+  assert.equal((await call('/api/v1/streak/repair', 'POST', { missed_date: kstDate(-3), method: 'points' }, u.token)).status, 200);
+  assert.equal(await balanceOf(u), before - 300);
+  assert.equal((await call('/api/v1/streak', 'GET', null, u.token)).json.data.current_streak, 4);
+});
+
+test('3일보다 오래된 놓친 날은 복구할 수 없다', async () => {
+  // 6·5일 전 완료 → 4일 전 놓침 → 3일 전부터 오늘까지 완료
+  const u = await setupHistory({ completedOffsets: [-6, -5, -3, -2, -1, 0], streak: 4 });
+  assert.equal((await repairInfo(u)).status, 'none');
+  const r = await call('/api/v1/streak/repair', 'POST', { missed_date: kstDate(-4), method: 'free' }, u.token);
+  assert.equal(r.status, 409);
+  assert.equal(await rowCount(u), 0);
+});
+
+test('이틀 연속으로 놓친 경우는 복구할 수 없다', async () => {
+  // 5일 전 완료 → 4·3일 전 놓침 → 2일 전부터 오늘까지 완료
+  const u = await setupHistory({ completedOffsets: [-5, -2, -1, 0], streak: 3 });
+  assert.equal((await repairInfo(u)).status, 'none');
+});
+
+test('복구 대상이 아닌 날짜를 보내면 409(MISSED_DATE_MISMATCH)', async () => {
+  const u = await setupHistory({ completedOffsets: [-4, -3, -1, 0], streak: 2 });
+  const r = await call('/api/v1/streak/repair', 'POST', { missed_date: kstDate(-1), method: 'free' }, u.token);
+  assert.equal(r.status, 409);
+  assert.equal(r.json.code, 'MISSED_DATE_MISMATCH');
 });

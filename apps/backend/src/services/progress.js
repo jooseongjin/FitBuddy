@@ -7,6 +7,8 @@ const envInt = (name, fallback) => {
   return Number.isInteger(value) && value >= 0 ? value : fallback;
 };
 const REPAIR_COST = envInt('STREAK_REPAIR_COST', 300);
+// 놓친 날로부터 며칠 안에 복구할 수 있는지 (기본 3일: 오늘 기준 1~3일 전에 놓친 하루)
+const REPAIR_WINDOW_DAYS = Math.max(1, envInt('STREAK_REPAIR_WINDOW_DAYS', 3));
 // 월별 복구 한도: 무료 복구와 포인트 복구를 따로 센다 (매월 1일 00:00 KST에 초기화, 이월 없음)
 const REPAIR_LIMITS = {
   basic: {
@@ -63,6 +65,58 @@ async function getCharacter(userNumber, connection = pool) {
   };
 }
 
+// 복구 대상 찾기. 놓친 날이 "하루"이고 최근 REPAIR_WINDOW_DAYS일 안이면 복구할 수 있다.
+//  A) 기록이 끊긴 채 아직 새로 시작하지 않음: 마지막 기록 다음 날 하루만 비었을 때
+//     → 그날을 채우면 연속 기록이 그대로 이어진다 (current_streak 유지, 마지막 날짜만 갱신)
+//  B) 놓친 뒤 이미 새로 시작함 (예: 금 놓침 → 토·일 완료): 완료·복구 이력으로 놓친 날과 그 전 연속 기록을 찾는다
+//     → 그날을 채우면 이전 연속 기록 + 지금 연속 기록이 합쳐진다
+//  복구한 날은 기록을 "잇기"만 하고 연속 일수에는 더하지 않는다 (기존 규칙과 같음)
+// 반환: { status: 'available'|'expired'|'none', missedDate, resultStreak, lastCompletedDate }
+async function findRepairTarget(connection, userNumber, today, record) {
+  const currentStreak = Number(record?.current_streak ?? 0);
+  const lastDate = dateKey(record?.last_completed_date);
+  if (!lastDate || currentStreak < 1) return { status: 'none', missedDate: null, resultStreak: 0 };
+  const gap = daysBetween(lastDate, today);
+
+  // A) 아직 새로 시작하지 않음
+  if (gap > 1) {
+    if (gap === 2) {
+      return { status: 'available', missedDate: addDays(today, -1), resultStreak: currentStreak, lastCompletedDate: addDays(today, -1) };
+    }
+    return { status: 'expired', missedDate: null, resultStreak: currentStreak };
+  }
+
+  // B) 이미 새로 시작함: 이력으로 놓친 날 찾기
+  const windowStart = addDays(today, -REPAIR_WINDOW_DAYS);
+  const historyStart = addDays(today, -400);
+  const [completedRows] = await connection.query(
+    `SELECT DISTINCT assigned_date FROM User_missions
+      WHERE Users_user_number = ? AND mission_status = 'completed' AND assigned_date BETWEEN ? AND ?`,
+    [userNumber, historyStart, today],
+  );
+  const [repairedRows] = await connection.query(
+    'SELECT missed_date FROM Streak_repairs WHERE Users_user_number = ? AND missed_date BETWEEN ? AND ?',
+    [userNumber, historyStart, today],
+  );
+  const completed = new Set(completedRows.map((row) => dateKey(row.assigned_date)));
+  const covered = new Set([...completed, ...repairedRows.map((row) => dateKey(row.missed_date))]);
+
+  // 마지막 기록일부터 거꾸로 이어진 날을 따라가 처음 비는 날 = 놓친 날
+  let missed = lastDate;
+  while (covered.has(missed)) missed = addDays(missed, -1);
+  if (missed === lastDate || missed < windowStart || missed >= today) return { status: 'none', missedDate: null, resultStreak: 0 };
+
+  // 놓친 날 바로 전날까지 이어진 이전 연속 기록 (완료한 날만 센다)
+  let previous = 0;
+  let day = addDays(missed, -1);
+  while (covered.has(day)) {
+    if (completed.has(day)) previous += 1;
+    day = addDays(day, -1);
+  }
+  if (previous < 1) return { status: 'none', missedDate: null, resultStreak: 0 };
+  return { status: 'available', missedDate: missed, resultStreak: previous + currentStreak, lastCompletedDate: lastDate };
+}
+
 async function getStreak(userNumber, connection = pool, today = todayKST()) {
   const [[record]] = await connection.query(
     'SELECT current_streak, last_completed_date FROM Streaks WHERE Users_user_number = ?',
@@ -92,17 +146,12 @@ async function getStreak(userNumber, connection = pool, today = todayKST()) {
   const pointsRemaining = Math.max(0, limits.points - pointsUsed);
   const monthlyRemaining = freeRemaining + pointsRemaining;
 
-  let repairStatus = 'none';
-  let missedDate = null;
-  let brokenStreak = 0;
-  if (gap !== null && gap > 1 && currentStreak > 0) {
-    brokenStreak = currentStreak;
-    if (gap > 2) repairStatus = 'expired';
-    else {
-      repairStatus = monthlyRemaining > 0 ? 'available' : 'monthly_limit';
-      missedDate = addDays(today, -1);
-    }
-  }
+  const target = await findRepairTarget(connection, userNumber, today, record);
+  let repairStatus = target.status;
+  if (repairStatus === 'available' && monthlyRemaining <= 0) repairStatus = 'monthly_limit';
+  const missedDate = repairStatus === 'available' || repairStatus === 'monthly_limit' ? target.missedDate : null;
+  // 복구하면 이어지는 연속 일수 (화면 문구 "N일 연속 기록이 이어져요"에 사용)
+  const brokenStreak = target.resultStreak;
 
   const [completedRows] = await connection.query(
     `SELECT assigned_date
@@ -281,14 +330,16 @@ async function repairStreak(userNumber, request) {
       'SELECT current_streak, last_completed_date FROM Streaks WHERE Users_user_number = ? FOR UPDATE',
       [userNumber],
     );
-    const lastDate = dateKey(streak?.last_completed_date);
-    const gap = lastDate ? daysBetween(lastDate, today) : null;
-    if (gap === null || gap <= 1 || Number(streak.current_streak) < 1) {
-      throw new ApiError(409, 'STREAK_NOT_BROKEN', '연속 기록이 이어지고 있어 복구할 필요가 없습니다.');
+    const target = await findRepairTarget(connection, userNumber, today, streak);
+    if (target.status === 'expired') {
+      throw new ApiError(409, 'STREAK_NOT_REPAIRABLE', `${REPAIR_WINDOW_DAYS}일보다 오래되었거나 이틀 이상 놓친 기록은 복구할 수 없습니다.`);
     }
-    if (gap > 2) throw new ApiError(409, 'STREAK_NOT_REPAIRABLE', '이틀 이상 지난 기록은 복구할 수 없습니다.');
-    const expectedMissedDate = addDays(today, -1);
-    if (request.missed_date !== expectedMissedDate) throw new ApiError(409, 'MISSED_DATE_MISMATCH', '복구 대상 날짜가 오늘 기준 어제와 다릅니다.');
+    if (target.status !== 'available') {
+      throw new ApiError(409, 'STREAK_NOT_BROKEN', '복구할 수 있는 놓친 날이 없습니다.');
+    }
+    if (request.missed_date !== target.missedDate) {
+      throw new ApiError(409, 'MISSED_DATE_MISMATCH', '복구 대상 날짜가 다릅니다.', { missed_date: target.missedDate });
+    }
 
     const [[existing]] = await connection.query(
       'SELECT repair_id FROM Streak_repairs WHERE Users_user_number = ? AND missed_date = ?',
@@ -332,8 +383,8 @@ async function repairStreak(userNumber, request) {
       );
     }
     await connection.query(
-      'UPDATE Streaks SET last_completed_date = ? WHERE Users_user_number = ?',
-      [request.missed_date, userNumber],
+      'UPDATE Streaks SET current_streak = ?, last_completed_date = ? WHERE Users_user_number = ?',
+      [target.resultStreak, target.lastCompletedDate, userNumber],
     );
     const balance = await getBalance(userNumber, connection);
     await connection.commit();
