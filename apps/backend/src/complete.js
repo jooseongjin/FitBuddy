@@ -33,6 +33,7 @@ const completeMission = async (req, res) => {
       await connection.rollback();
       return res.status(409).json({ message: '이미 완료되었거나 배정되지 않은 미션입니다.' });
     }
+
     const [[missionInfo]] = await connection.query(
       "SELECT m.base_point, m.Missions_id FROM User_missions um JOIN Missions m ON um.Missions_id = m.Missions_id WHERE um.user_mission_id = ?",
       [userMissionId],
